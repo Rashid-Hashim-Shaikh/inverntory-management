@@ -11,6 +11,7 @@ import {
   Tooltip,
   ResponsiveContainer
 } from 'recharts';
+import { useTheme } from '@/lib/use-theme';
 
 interface BarChartProps {
   data: { date: string; value: number }[];
@@ -36,6 +37,8 @@ const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
 };
 
 export function BarChart({ data, title, className }: BarChartProps) {
+  const theme = useTheme();
+
   return (
     <Card className={className}>
       <CardHeader>
@@ -47,32 +50,32 @@ export function BarChart({ data, title, className }: BarChartProps) {
             <LineChart
               data={data}
               margin={{
-                top: 5,
-                right: 30,
-                left: 20,
-                bottom: 5,
+                top: 8,
+                right: 24,
+                left: 16,
+                bottom: 8,
               }}
             >
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <CartesianGrid strokeDasharray="3 3" stroke={theme.colors.border} />
               <XAxis 
                 dataKey="date" 
                 className="text-xs" 
-                tick={{ fill: 'var(--muted-foreground)' }}
+                tick={{ fill: theme.colors.mutedForeground }}
               />
               <YAxis 
                 className="text-xs"
-                tick={{ fill: 'var(--muted-foreground)' }}
+                tick={{ fill: theme.colors.mutedForeground }}
                 tickFormatter={(value) => `₹${value}`}
               />
               <Tooltip content={<CustomTooltip />} />
               <Line 
-                type="basis"
+                type="monotone"
                 dataKey="value" 
-                stroke="hsl(var(--primary))"
+                stroke={theme.colors.primary}
                 strokeWidth={2}
-                connectNulls
-                dot={{ fill: 'hsl(var(--primary))', r: 4 }}
-                activeDot={{ r: 6, fill: 'hsl(var(--primary))', stroke: 'var(--background)', strokeWidth: 2 }}
+                connectNulls={false}
+                dot={{ fill: theme.colors.primary, r: 3 }}
+                activeDot={{ r: 1, fill: theme.colors.primary, stroke: theme.colors.background, strokeWidth: 2 }}
                 isAnimationActive={true}
               />
             </LineChart>
