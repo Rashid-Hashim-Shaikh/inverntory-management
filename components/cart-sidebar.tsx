@@ -1,13 +1,18 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { X, Plus, Minus, ShoppingCart, Trash2, IndianRupee, Check, AlertCircle } from 'lucide-react';
 import { useCartStore, CartItem } from '@/lib/store/cart';
 import { useProductStore } from '@/lib/store/products';
 import { useTheme } from '@/lib/use-theme';
+import { ContactSelectionModal } from '@/components/contact-selection-modal';
+import { Customer } from '@/lib/store/customers';
+import { Supplier } from '@/lib/store/suppliers';
 
 export function CartSidebar() {
   const theme = useTheme();
+  const router = useRouter();
   const {
     items,
     isOpen,
@@ -30,6 +35,9 @@ export function CartSidebar() {
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [processResult, setProcessResult] = useState<{ success: boolean; errors: string[] } | null>(null);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [contactType, setContactType] = useState<'customer' | 'supplier'>('customer');
+
 
   const inItems = getCartItemsByType('in');
   const outItems = getCartItemsByType('out');
@@ -58,6 +66,64 @@ export function CartSidebar() {
   };
 
   const handleProceed = async () => {
+    // Check if we have items that need contact selection
+    const hasOutItems = outItems.length > 0;
+    const hasInItems = inItems.length > 0;
+    
+    if (hasOutItems && hasInItems) {
+      // Mixed cart - ask for customer first (for OUT items)
+      setContactType('customer');
+      setShowContactModal(true);
+      return;
+    } else if (hasOutItems) {
+      // Only OUT items - ask for customer
+      setContactType('customer');
+      setShowContactModal(true);
+      return;
+    } else if (hasInItems) {
+      // Only IN items - ask for supplier
+      setContactType('supplier');
+      setShowContactModal(true);
+      return;
+    }
+
+    // No items in cart
+    setProcessResult({
+      success: false,
+      errors: ['Cart is empty.'],
+    });
+  };
+
+  const handleContactSelect = (contact: Customer | Supplier) => {
+    setShowContactModal(false);
+    
+    // If we have OUT items and selected customer, navigate to PDF preview page
+    if (contactType === 'customer' && outItems.length > 0) {
+      console.log('Navigating to PDF preview for customer:', contact.id);
+      // Keep cart open when navigating to invoice preview
+      // Use setTimeout to ensure modal closes before navigation
+      setTimeout(() => {
+        try {
+          router.push(`/invoice-preview?customerId=${contact.id}`);
+        } catch (error) {
+          console.error('Navigation error:', error);
+        }
+      }, 100);
+      return;
+    }
+    
+    // If we have mixed cart and just selected customer, now ask for supplier
+    if (contactType === 'customer' && inItems.length > 0 && outItems.length > 0) {
+      setContactType('supplier');
+      setShowContactModal(true);
+      return;
+    }
+
+    // Process the cart with selected contact(s)
+    processCartWithContact();
+  };
+
+  const processCartWithContact = async () => {
     setIsProcessing(true);
     setProcessResult(null);
 
@@ -394,6 +460,16 @@ export function CartSidebar() {
           </div>
         </div>
       )}
+
+      {/* Contact Selection Modal */}
+      <ContactSelectionModal
+        isOpen={showContactModal}
+        onClose={() => setShowContactModal(false)}
+        type={contactType}
+        onSelect={handleContactSelect}
+      />
+
+
     </div>
   );
 } 

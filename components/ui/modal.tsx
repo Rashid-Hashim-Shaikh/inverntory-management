@@ -9,7 +9,7 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
 }
 
 export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
@@ -41,10 +41,12 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
     md: 'max-w-lg',
     lg: 'max-w-2xl',
     xl: 'max-w-4xl',
+    '2xl': 'max-w-6xl',
+    '3xl': 'max-w-7xl',
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black bg-opacity-50 transition-opacity"
@@ -53,14 +55,14 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
       
       {/* Modal */}
       <div
-        className={`relative w-full ${sizeClasses[size]} rounded-lg shadow-xl transition-all`}
+        className={`relative w-full ${sizeClasses[size]} max-h-[90vh] rounded-lg shadow-xl transition-all my-8 flex flex-col`}
         style={{
           backgroundColor: theme.colors.card,
           color: theme.colors.cardForeground,
         }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: theme.colors.border }}>
+        <div className="flex items-center justify-between p-6 border-b flex-shrink-0" style={{ borderColor: theme.colors.border }}>
           <h2 className="text-xl font-semibold">{title}</h2>
           <button
             onClick={onClose}
@@ -72,7 +74,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
         </div>
         
         {/* Content */}
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto flex-1">
           {children}
         </div>
       </div>
