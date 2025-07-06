@@ -65,20 +65,20 @@ const defaultTheme: Theme = {
     foreground: '#000000',
     card: '#fdfdfd',
     cardForeground: '#000000',
-    muted: '#f8fafc',
-    mutedForeground: '#64748b',
-    accent: '#f1f5f9',
-    accentForeground: '#0f172a',
-    destructive: '#ef4444',
+    muted: '#f5f5f5',
+    mutedForeground: '#525252',
+    accent: '#e2ebff',
+    accentForeground: '#1e69dc',
+    destructive: '#e54b4f',
     destructiveForeground: '#ffffff',
-    border: '#e2e8f0',
-    input: '#f1f5f9',
+    border: '#e7e7ee',
+    input: '#ebebeb',
     ring: '#000000',
-    chart1: '#22c55e',
-    chart2: '#8b5cf6',
-    chart3: '#f59e0b',
-    chart4: '#3b82f6',
-    chart5: '#64748b',
+    chart1: '#4ac885',
+    chart2: '#7033ff',
+    chart3: '#fd822b',
+    chart4: '#3276e4',
+    chart5: '#747474',
   },
   spacing: {
     xs: '0.25rem',
@@ -107,6 +107,11 @@ const defaultTheme: Theme = {
 function convertCSSValue(cssValue: string): string {
   if (typeof window === 'undefined') return cssValue;
   
+  // If it's already a hex color, return as is
+  if (cssValue.startsWith('#')) {
+    return cssValue;
+  }
+  
   // Create a temporary element to convert CSS values to computed values
   const tempElement = document.createElement('div');
   tempElement.style.position = 'absolute';
@@ -131,7 +136,7 @@ export function useTheme(): Theme {
       
       const getColorValue = (varName: string): string => {
         const value = root.getPropertyValue(varName).trim();
-        return value ? convertCSSValue(`oklch(${value})`) : defaultTheme.colors.primary;
+        return value ? convertCSSValue(value) : defaultTheme.colors.primary;
       };
 
       const updatedTheme: Theme = {

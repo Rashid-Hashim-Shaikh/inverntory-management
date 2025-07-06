@@ -1,26 +1,64 @@
 'use client'
 
+import { useEffect, useMemo } from 'react';
 import { 
   LucideDollarSign, 
-  LucideUsers, 
-  LucideCalendarClock,
+  LucidePackage, 
+  LucideShoppingCart,
   LucideAlertTriangle
 } from "lucide-react";
 import { StatsCard } from "@/components/ui/stats-card";
 import { BarChart } from "@/components/ui/bar-chart";
-
-// Mock data for the daily revenue chart with consistent values
-const dailyRevenueData = [
-  { date: 'Mon', value: 12000 },
-  { date: 'Tue', value: 18000 },
-  { date: 'Wed', value: 16000 },
-  { date: 'Thu', value: 22000 },
-  { date: 'Fri', value: 24000 },
-  { date: 'Sat', value: 19000 },
-  { date: 'Sun', value: 13000 },
-];
+import { useProductStore } from "@/lib/store/products";
 
 export default function Home() {
+  const { products, initializeProducts } = useProductStore();
+
+  // Initialize products on component mount
+  useEffect(() => {
+    initializeProducts();
+  }, [initializeProducts]);
+
+  // Calculate dashboard metrics
+  const dashboardMetrics = useMemo(() => {
+    const totalProducts = products.length;
+    const totalInventoryValue = products.reduce((sum, product) => sum + (product.price * product.quantity), 0);
+    const totalPurchaseValue = products.reduce((sum, product) => sum + (product.purchasePrice * product.quantity), 0);
+    const potentialProfit = totalInventoryValue - totalPurchaseValue;
+    const lowStockItems = products.filter(product => product.quantity < 10).length;
+    const totalQuantity = products.reduce((sum, product) => sum + product.quantity, 0);
+
+    return {
+      totalProducts,
+      totalInventoryValue,
+      potentialProfit,
+      lowStockItems,
+      totalQuantity
+    };
+  }, [products]);
+
+  // Sample inventory distribution data based on actual products
+  const inventoryDistributionData = useMemo(() => {
+    if (products.length === 0) {
+      return [
+        { date: 'No Data', value: 0 }
+      ];
+    }
+
+    // Group products by unit type and show their total values
+    const unitGroups = products.reduce((acc, product) => {
+      const unit = product.unit;
+      if (!acc[unit]) {
+        acc[unit] = 0;
+      }
+      acc[unit] += product.price * product.quantity;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(unitGroups)
+      .map(([unit, value]) => ({ date: unit, value }))
+      .slice(0, 7); // Show max 7 categories
+  }, [products]);
   return (
     <div className="flex flex-col p-6 md:p-8 overflow-auto h-full">
       <div className="flex flex-col gap-2">
@@ -32,54 +70,54 @@ export default function Home() {
 
       <div className="grid gap-6 mt-6 md:grid-cols-2 lg:grid-cols-4">
         <StatsCard
-          title="Total Sales "
-          value="₹24,780"
-          icon={LucideDollarSign}
-          description="Total revenue for current month"
+          title="Total Products"
+          value={dashboardMetrics.totalProducts.toString()}
+          icon={LucidePackage}
+          description="Total number of products in inventory"
           trend={{
-            value: 12.5,
-            isPositive: true
+            value: dashboardMetrics.totalProducts,
+            isPositive: dashboardMetrics.totalProducts > 0
           }}
         />
         
         <StatsCard
-          title="Yesterday's Sales"
-          value="₹1,429"
-          icon={LucideCalendarClock}
-          description="Total revenue from yesterday"
+          title="Inventory Value"
+          value={`₹${dashboardMetrics.totalInventoryValue.toLocaleString()}`}
+          icon={LucideDollarSign}
+          description="Total value of current inventory"
           trend={{
-            value: 3.2,
-            isPositive: true
+            value: dashboardMetrics.potentialProfit,
+            isPositive: dashboardMetrics.potentialProfit > 0
           }}
         />
         
         <StatsCard
           title="Low Stock Items"
-          value="7"
+          value={dashboardMetrics.lowStockItems.toString()}
           icon={LucideAlertTriangle}
-          description="Products that need restocking"
+          description="Products with less than 10 units"
           trend={{
-            value: 2,
-            isPositive: false
+            value: dashboardMetrics.lowStockItems,
+            isPositive: dashboardMetrics.lowStockItems === 0
           }}
         />
         
         <StatsCard
-          title="Total Customers"
-          value="842"
-          icon={LucideUsers}
-          description="Active customer accounts"
+          title="Total Quantity"
+          value={dashboardMetrics.totalQuantity.toString()}
+          icon={LucideShoppingCart}
+          description="Total units across all products"
           trend={{
-            value: 4.6,
-            isPositive: true
+            value: dashboardMetrics.totalQuantity,
+            isPositive: dashboardMetrics.totalQuantity > 0
           }}
         />
       </div>
 
       <div className="grid gap-6 mt-6 pb-6">
         <BarChart 
-          data={dailyRevenueData}
-          title="Daily Revenue (Last 7 Days)"
+          data={inventoryDistributionData}
+          title="Inventory Value by Unit Type"
         />
       </div>
     </div>

@@ -1,0 +1,209 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Search, Plus, ShoppingCart } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { useTheme } from '@/lib/use-theme';
+import { AddProductModal } from '@/components/add-product-modal';
+import { CartSidebar } from '@/components/cart-sidebar';
+import { useProductStore, ProductFormData } from '@/lib/store/products';
+import { useCartStore } from '@/lib/store/cart';
+
+export default function ProductsPage() {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const theme = useTheme();
+  
+  // Zustand stores
+  const { products, addProduct, searchProducts, initializeProducts } = useProductStore();
+  const { addToCart, toggleCart, getTotalItems } = useCartStore();
+
+  // Initialize products on component mount
+  useEffect(() => {
+    initializeProducts();
+  }, [initializeProducts]);
+
+  const filteredProducts = searchTerm 
+    ? searchProducts(searchTerm)
+    : products;
+
+  const handleAddProduct = (productData: ProductFormData) => {
+    addProduct(productData);
+  };
+
+  const handleOpenModal = () => {
+    setIsModalOpen(true);
+  };
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header with Search and Add Button */}
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+        <h1 className="text-2xl font-bold">Products</h1>
+        
+        <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+          {/* Search Bar */}
+          <div className="relative flex-1 sm:w-80">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <input
+              type="text"
+              placeholder="Search products..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              style={{
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.background,
+                color: theme.colors.foreground,
+              }}
+            />
+          </div>
+          
+          {/* Cart and Add Product Buttons */}
+          <div className="flex gap-3">
+            {/* Cart Toggle Button */}
+            <button
+              onClick={toggleCart}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors hover:opacity-90 relative"
+              style={{
+                backgroundColor: theme.colors.secondary,
+                color: theme.colors.secondaryForeground,
+              }}
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Cart
+              {getTotalItems() > 0 && (
+                <span
+                  className="absolute -top-2 -right-2 h-5 w-5 rounded-full text-xs flex items-center justify-center font-bold"
+                  style={{
+                    backgroundColor: theme.colors.destructive,
+                    color: theme.colors.destructiveForeground,
+                  }}
+                >
+                  {getTotalItems()}
+                </span>
+              )}
+            </button>
+
+            {/* Add Product Button */}
+            <button
+              onClick={handleOpenModal}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors hover:opacity-90"
+              style={{
+                backgroundColor: theme.colors.primary,
+                color: theme.colors.primaryForeground,
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              Add Product
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Products Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {filteredProducts.map((product) => (
+          <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow duration-200">
+            <CardContent className="p-0">
+              {/* Product Image */}
+              <div className="aspect-[4/3] bg-gray-100 relative overflow-hidden">
+                <img
+                  src={product.image}
+                  alt={product.name}
+                  className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
+                  onError={(e) => {
+                    // Fallback for broken images
+                    const target = e.target as HTMLImageElement;
+                    target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDMwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xMjUgNzVMMTc1IDEyNUgxMjVIMTAwTDEyNSA3NVoiIGZpbGw9IiNEMUQ1REIiLz4KPHBhdGggZD0iTTEyNSA3NUwxMDAgMTI1SDE3NUwxMjUgNzVaIiBmaWxsPSIjOUNBM0FGIi8+Cjx0ZXh0IHg9IjE1MCIgeT0iMTEwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjg3Mzg2IiBmb250LXNpemU9IjE0IiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiPkltYWdlPC90ZXh0Pgo8L3N2Zz4K';
+                  }}
+                />
+              </div>
+              
+              {/* Product Info */}
+              <div className="p-3">
+                <h3 className="font-semibold text-base mb-1.5 line-clamp-2" style={{ color: theme.colors.foreground }}>
+                  {product.name}
+                </h3>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-lg font-bold" style={{ color: theme.colors.primary }}>
+                    ₹{product.price.toLocaleString()}
+                  </p>
+                  <div className="text-sm" style={{ color: theme.colors.mutedForeground }}>
+                    {product.quantity} {product.unit}
+                  </div>
+                </div>
+                
+                {/* In/Out Buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => addToCart(product, 'in')}
+                    className="px-3 py-2 rounded-lg text-sm font-medium transition-colors hover:opacity-90 bg-green-600 text-white"
+                  >
+                    In
+                  </button>
+                  <button
+                    onClick={() => addToCart(product, 'out')}
+                    className="px-3 py-2 rounded-lg text-sm font-medium transition-colors hover:opacity-90 bg-blue-600 text-white"
+                  >
+                    Out
+                  </button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* No Results Message */}
+      {filteredProducts.length === 0 && (
+        <div className="text-center py-12">
+          {products.length === 0 ? (
+            // No products at all - encourage user to add first product
+            <div className="space-y-4">
+              <div className="text-6xl mb-4">📦</div>
+              <h2 className="text-2xl font-semibold mb-2" style={{ color: theme.colors.foreground }}>
+                No Products Yet
+              </h2>
+              <p className="text-lg mb-6" style={{ color: theme.colors.mutedForeground }}>
+                Get started by adding your first product to the inventory
+              </p>
+              <button
+                onClick={handleOpenModal}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-lg font-medium text-lg transition-colors hover:opacity-90"
+                style={{
+                  backgroundColor: theme.colors.primary,
+                  color: theme.colors.primaryForeground,
+                }}
+              >
+                <Plus className="h-5 w-5" />
+                Add Your First Product
+              </button>
+            </div>
+          ) : (
+            // Products exist but search returned no results
+            <div className="space-y-4">
+              <div className="text-6xl mb-4">🔍</div>
+              <h2 className="text-xl font-semibold mb-2" style={{ color: theme.colors.foreground }}>
+                No Products Found
+              </h2>
+              <p className="text-lg" style={{ color: theme.colors.mutedForeground }}>
+                No products match your search term &ldquo;{searchTerm}&rdquo;
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add Product Modal */}
+      <AddProductModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onAddProduct={handleAddProduct}
+      />
+
+      {/* Cart Sidebar */}
+      <CartSidebar />
+    </div>
+  );
+} 

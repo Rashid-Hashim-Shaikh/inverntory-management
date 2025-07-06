@@ -9,7 +9,8 @@ import {
   LucideSettings,
   LucideBadgeCheck,
   LucidePackage,
-  LucideLayoutDashboard
+  LucideLayoutDashboard,
+  LucideTruck
 } from "lucide-react";
 import { useSidebar } from "./ui/sidebar";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ const navItems = [
   { label: "Products", icon: LucidePackage, href: "/products" },
   { label: "Sales History", icon: LucideBadgeCheck, href: "/sales" },
   { label: "Customers", icon: LucideUsers, href: "/customers" },
+  { label: "Suppliers", icon: LucideTruck, href: "/suppliers" },
   { label: "Settings", icon: LucideSettings, href: "/settings" },
 ];
 
