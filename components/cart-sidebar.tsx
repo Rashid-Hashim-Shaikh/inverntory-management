@@ -444,7 +444,7 @@ export function CartSidebar() {
                 color: theme.colors.primaryForeground,
               }}
             >
-              {isProcessing ? 'Processing...' : 'Proceed & Update Inventory'}
+              {isProcessing ? 'Processing...' : 'Proceed'}
             </button>
             
             <button

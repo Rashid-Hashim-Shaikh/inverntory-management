@@ -7,10 +7,10 @@ import {
   LucideHome, 
   LucideUsers,
   LucideSettings,
-  LucideBadgeCheck,
   LucidePackage,
   LucideLayoutDashboard,
-  LucideTruck
+  LucideTruck,
+  LucideReceipt
 } from "lucide-react";
 import { useSidebar } from "./ui/sidebar";
 import { cn } from "@/lib/utils";
@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { label: "Dashboard", icon: LucideLayoutDashboard, href: "/" },
   { label: "Products", icon: LucidePackage, href: "/products" },
-  { label: "Sales History", icon: LucideBadgeCheck, href: "/sales" },
+  { label: "Transactions", icon: LucideReceipt, href: "/transactions" },
   { label: "Customers", icon: LucideUsers, href: "/customers" },
   { label: "Suppliers", icon: LucideTruck, href: "/suppliers" },
   { label: "Settings", icon: LucideSettings, href: "/settings" },

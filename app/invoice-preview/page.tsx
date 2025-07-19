@@ -7,6 +7,7 @@ import { useTheme } from '@/lib/use-theme';
 import { useCartStore } from '@/lib/store/cart';
 import { useProductStore } from '@/lib/store/products';
 import { useCustomerStore } from '@/lib/store/customers';
+import { useTransactionStore } from '@/lib/store/transactions';
 import { generateAndPreviewPDF, downloadPDF } from '@/lib/pdf-generator';
 import { toast } from 'react-toastify';
 
@@ -19,6 +20,7 @@ export default function InvoicePreviewPage() {
   const { items, processCart, setCartOpen } = useCartStore();
   const { updateInventory } = useProductStore();
   const { customers } = useCustomerStore();
+  const { addTransaction } = useTransactionStore();
   
   const [pdfDataUri, setPdfDataUri] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -88,6 +90,22 @@ export default function InvoicePreviewPage() {
       if (result.success) {
         // Close the cart when stock is updated successfully
         setCartOpen(false);
+        
+        // Create transaction record
+        if (invoiceData) {
+          addTransaction({
+            type: 'sale',
+            invoiceNumber: invoiceData.invoiceNumber,
+            date: invoiceData.date,
+            customer: invoiceData.customer,
+            items: invoiceData.items,
+            totalAmount: invoiceData.totalAmount,
+            totalItems: invoiceData.items.length,
+            totalQuantity: invoiceData.items.reduce((sum, item) => sum + item.quantity, 0),
+            status: 'completed',
+          });
+        }
+        
         // Show success toast
         toast.success('Stock Updated Successfully! Invoice processed and inventory has been updated. Redirecting to products page...');
         // Auto-redirect after successful processing and toast display
