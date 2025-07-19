@@ -12,12 +12,7 @@ import { BarChart } from "@/components/ui/bar-chart";
 import { useProductStore } from "@/lib/store/products";
 
 export default function Home() {
-  const { products, initializeProducts } = useProductStore();
-
-  // Initialize products on component mount
-  useEffect(() => {
-    initializeProducts();
-  }, [initializeProducts]);
+  const { products } = useProductStore();
 
   // Calculate dashboard metrics
   const dashboardMetrics = useMemo(() => {

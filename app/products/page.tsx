@@ -15,20 +15,31 @@ export default function ProductsPage() {
   const theme = useTheme();
   
   // Zustand stores
-  const { products, addProduct, searchProducts, initializeProducts } = useProductStore();
+  const { 
+    products, 
+    loading, 
+    error, 
+    fetchProducts, 
+    addProduct, 
+    searchProducts, 
+    clearError 
+  } = useProductStore();
   const { addToCart, toggleCart, getTotalItems } = useCartStore();
 
-  // Initialize products on component mount
+  // Fetch products on component mount
   useEffect(() => {
-    initializeProducts();
-  }, [initializeProducts]);
+    fetchProducts();
+  }, [fetchProducts]);
 
   const filteredProducts = searchTerm 
     ? searchProducts(searchTerm)
     : products;
 
-  const handleAddProduct = (productData: ProductFormData) => {
-    addProduct(productData);
+  const handleAddProduct = async (productData: ProductFormData) => {
+    const success = await addProduct(productData);
+    if (success) {
+      setIsModalOpen(false);
+    }
   };
 
   const handleOpenModal = () => {
@@ -101,23 +112,46 @@ export default function ProductsPage() {
         </div>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p style={{ color: theme.colors.mutedForeground }}>Loading products...</p>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div className="text-center py-12">
+          <div className="text-6xl mb-4">⚠️</div>
+          <h2 className="text-xl font-semibold mb-2" style={{ color: theme.colors.foreground }}>
+            Error Loading Products
+          </h2>
+          <p className="text-lg mb-4" style={{ color: theme.colors.mutedForeground }}>
+            {error}
+          </p>
+          <button
+            onClick={() => { clearError(); fetchProducts(); }}
+            className="px-4 py-2 rounded-lg font-medium transition-colors hover:opacity-90"
+            style={{
+              backgroundColor: theme.colors.primary,
+              color: theme.colors.primaryForeground,
+            }}
+          >
+            Try Again
+          </button>
+        </div>
+      )}
+
       {/* Products Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {filteredProducts.map((product) => (
+      {!loading && !error && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredProducts.map((product) => (
           <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow duration-200">
             <CardContent className="p-0">
               {/* Product Image */}
-              <div className="aspect-[4/3] bg-gray-100 relative overflow-hidden">
-                <img
-                  src={product.image}
-                  alt={product.name}
-                  className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
-                  onError={(e) => {
-                    // Fallback for broken images
-                    const target = e.target as HTMLImageElement;
-                    target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDMwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xMjUgNzVMMTc1IDEyNUgxMjVIMTAwTDEyNSA3NVoiIGZpbGw9IiNEMUQ1REIiLz4KPHBhdGggZD0iTTEyNSA3NUwxMDAgMTI1SDE3NUwxMjUgNzVaIiBmaWxsPSIjOUNBM0FGIi8+Cjx0ZXh0IHg9IjE1MCIgeT0iMTEwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjg3Mzg2IiBmb250LXNpemU9IjE0IiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiPkltYWdlPC90ZXh0Pgo8L3N2Zz4K';
-                  }}
-                />
+              <div className="aspect-[4/3] bg-gray-100 relative overflow-hidden flex items-center justify-center">
+                <div className="text-4xl text-gray-400">📦</div>
               </div>
               
               {/* Product Info */}
@@ -154,9 +188,10 @@ export default function ProductsPage() {
           </Card>
         ))}
       </div>
+      )}
 
       {/* No Results Message */}
-      {filteredProducts.length === 0 && (
+      {!loading && !error && filteredProducts.length === 0 && (
         <div className="text-center py-12">
           {products.length === 0 ? (
             // No products at all - encourage user to add first product

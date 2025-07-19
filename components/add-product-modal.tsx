@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Upload, IndianRupee } from 'lucide-react';
+import { IndianRupee } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { useTheme } from '@/lib/use-theme';
 import { ProductFormData } from '@/lib/store/products';
@@ -14,24 +14,23 @@ interface AddProductModalProps {
 
 interface FormErrors {
   name?: string;
-  image?: string;
-  purchasePrice?: string;
-  sellPrice?: string;
+  description?: string;
+  price?: string;
   quantity?: string;
   unit?: string;
+  category?: string;
 }
 
 export function AddProductModal({ isOpen, onClose, onAddProduct }: AddProductModalProps) {
   const theme = useTheme();
   const [formData, setFormData] = useState<ProductFormData>({
     name: '',
-    image: '',
-    purchasePrice: 0,
-    sellPrice: 0,
+    description: '',
+    price: 0,
     quantity: 1,
-    unit: 'Box',
+    unit: 'pcs',
+    category: 'General',
   });
-  const [imagePreview, setImagePreview] = useState<string>('');
   const [errors, setErrors] = useState<FormErrors>({});
 
   const handleInputChange = (field: keyof ProductFormData, value: string | number) => {
@@ -49,22 +48,6 @@ export function AddProductModal({ isOpen, onClose, onAddProduct }: AddProductMod
     }
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        setImagePreview(result);
-        setFormData(prev => ({
-          ...prev,
-          image: result
-        }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
@@ -72,20 +55,12 @@ export function AddProductModal({ isOpen, onClose, onAddProduct }: AddProductMod
       newErrors.name = 'Product name is required';
     }
 
-    if (!formData.image) {
-      newErrors.image = 'Product image is required';
+    if (!formData.description.trim()) {
+      newErrors.description = 'Product description is required';
     }
 
-    if (formData.purchasePrice <= 0) {
-      newErrors.purchasePrice = 'Purchase price must be greater than 0';
-    }
-
-    if (formData.sellPrice <= 0) {
-      newErrors.sellPrice = 'Sell price must be greater than 0';
-    }
-
-    if (formData.sellPrice <= formData.purchasePrice) {
-      newErrors.sellPrice = 'Sell price must be greater than purchase price';
+    if (formData.price <= 0) {
+      newErrors.price = 'Price must be greater than 0';
     }
 
     if (formData.quantity <= 0) {
@@ -96,15 +71,19 @@ export function AddProductModal({ isOpen, onClose, onAddProduct }: AddProductMod
       newErrors.unit = 'Unit is required';
     }
 
+    if (!formData.category.trim()) {
+      newErrors.category = 'Category is required';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (validateForm()) {
-      onAddProduct(formData);
+      await onAddProduct(formData);
       handleClose();
     }
   };
@@ -112,13 +91,12 @@ export function AddProductModal({ isOpen, onClose, onAddProduct }: AddProductMod
   const handleClose = () => {
     setFormData({
       name: '',
-      image: '',
-      purchasePrice: 0,
-      sellPrice: 0,
+      description: '',
+      price: 0,
       quantity: 1,
-      unit: 'Box',
+      unit: 'pcs',
+      category: 'General',
     });
-    setImagePreview('');
     setErrors({});
     onClose();
   };
@@ -126,132 +104,81 @@ export function AddProductModal({ isOpen, onClose, onAddProduct }: AddProductMod
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Add New Product" size="lg">
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Product Image */}
-        <div>
-          <label className="block text-sm font-medium mb-2">Product Image</label>
-          <div className="flex items-center space-x-4">
-            {/* Image Preview */}
-            <div className="flex-shrink-0">
-              {imagePreview ? (
-                <img
-                  src={imagePreview}
-                  alt="Product preview"
-                  className="w-24 h-24 object-cover rounded-lg border-2"
-                  style={{ borderColor: theme.colors.border }}
-                />
-              ) : (
-                <div
-                  className="w-24 h-24 rounded-lg border-2 border-dashed flex items-center justify-center"
-                  style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.muted }}
-                >
-                  <Upload className="h-8 w-8 text-gray-400" />
-                </div>
-              )}
-            </div>
-            
-            {/* File Input */}
-            <div className="flex-1">
-                             <input
-                 type="file"
-                 accept="image/*"
-                 onChange={handleImageChange}
-                 className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:cursor-pointer hover:file:bg-opacity-80"
-                 style={{
-                   color: theme.colors.foreground,
-                   backgroundColor: theme.colors.input,
-                 }}
-               />
-              {errors.image && (
-                <p className="text-red-500 text-sm mt-1">{errors.image}</p>
-              )}
-            </div>
-          </div>
-        </div>
-
         {/* Product Name */}
         <div>
           <label className="block text-sm font-medium mb-2">Product Name</label>
-                     <input
-             type="text"
-             value={formData.name}
-             onChange={(e) => handleInputChange('name', e.target.value)}
-             placeholder="Enter product name"
-             className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent"
-             style={{
-               borderColor: errors.name ? '#ef4444' : theme.colors.border,
-               backgroundColor: theme.colors.input,
-               color: theme.colors.foreground,
-             }}
-           />
+          <input
+            type="text"
+            value={formData.name}
+            onChange={(e) => handleInputChange('name', e.target.value)}
+            placeholder="Enter product name"
+            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent"
+            style={{
+              borderColor: errors.name ? '#ef4444' : theme.colors.border,
+              backgroundColor: theme.colors.input,
+              color: theme.colors.foreground,
+            }}
+          />
           {errors.name && (
             <p className="text-red-500 text-sm mt-1">{errors.name}</p>
           )}
         </div>
 
-        {/* Price Fields */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Purchase Price */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Purchase Price</label>
-            <div className="relative">
-              <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="number"
-                value={formData.purchasePrice || ''}
-                onChange={(e) => handleInputChange('purchasePrice', parseFloat(e.target.value) || 0)}
-                placeholder="0.00"
-                min="0"
-                step="0.01"
-                className="w-full pl-10 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent"
-                style={{
-                  borderColor: errors.purchasePrice ? '#ef4444' : theme.colors.border,
-                  backgroundColor: theme.colors.input,
-                  color: theme.colors.foreground,
-                }}
-              />
-            </div>
-            {errors.purchasePrice && (
-              <p className="text-red-500 text-sm mt-1">{errors.purchasePrice}</p>
-            )}
-          </div>
-
-                          {/* Sale Price */}
-                <div>
-                  <label className="block text-sm font-medium mb-2">Sale Price</label>
-            <div className="relative">
-              <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="number"
-                value={formData.sellPrice || ''}
-                onChange={(e) => handleInputChange('sellPrice', parseFloat(e.target.value) || 0)}
-                placeholder="0.00"
-                min="0"
-                step="0.01"
-                className="w-full pl-10 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent"
-                style={{
-                  borderColor: errors.sellPrice ? '#ef4444' : theme.colors.border,
-                  backgroundColor: theme.colors.input,
-                  color: theme.colors.foreground,
-                }}
-              />
-            </div>
-            {errors.sellPrice && (
-              <p className="text-red-500 text-sm mt-1">{errors.sellPrice}</p>
-            )}
-          </div>
+        {/* Product Description */}
+        <div>
+          <label className="block text-sm font-medium mb-2">Description</label>
+          <textarea
+            value={formData.description}
+            onChange={(e) => handleInputChange('description', e.target.value)}
+            placeholder="Enter product description"
+            rows={3}
+            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent"
+            style={{
+              borderColor: errors.description ? '#ef4444' : theme.colors.border,
+              backgroundColor: theme.colors.input,
+              color: theme.colors.foreground,
+            }}
+          />
+          {errors.description && (
+            <p className="text-red-500 text-sm mt-1">{errors.description}</p>
+          )}
         </div>
 
-        {/* Quantity and Unit Fields */}
+        {/* Price Field */}
+        <div>
+          <label className="block text-sm font-medium mb-2">Price</label>
+          <div className="relative">
+            <IndianRupee className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="number"
+              value={formData.price || ''}
+              onChange={(e) => handleInputChange('price', parseFloat(e.target.value) || 0)}
+              placeholder="0.00"
+              step="0.01"
+              min="0"
+              className="w-full pl-10 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent"
+              style={{
+                borderColor: errors.price ? '#ef4444' : theme.colors.border,
+                backgroundColor: theme.colors.input,
+                color: theme.colors.foreground,
+              }}
+            />
+          </div>
+          {errors.price && (
+            <p className="text-red-500 text-sm mt-1">{errors.price}</p>
+          )}
+        </div>
+
+        {/* Quantity and Unit */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Quantity */}
           <div>
             <label className="block text-sm font-medium mb-2">Quantity</label>
             <input
               type="number"
               value={formData.quantity || ''}
               onChange={(e) => handleInputChange('quantity', parseInt(e.target.value) || 0)}
-              placeholder="1"
-              min="1"
+              placeholder="0"
+              min="0"
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent"
               style={{
                 borderColor: errors.quantity ? '#ef4444' : theme.colors.border,
@@ -264,7 +191,6 @@ export function AddProductModal({ isOpen, onClose, onAddProduct }: AddProductMod
             )}
           </div>
 
-          {/* Unit */}
           <div>
             <label className="block text-sm font-medium mb-2">Unit</label>
             <select
@@ -277,16 +203,16 @@ export function AddProductModal({ isOpen, onClose, onAddProduct }: AddProductMod
                 color: theme.colors.foreground,
               }}
             >
-              <option value="Box">Box</option>
-              <option value="Container">Container</option>
-              <option value="Piece">Piece</option>
-              <option value="Kg">Kg</option>
-              <option value="Liter">Liter</option>
-              <option value="Pack">Pack</option>
-              <option value="Carton">Carton</option>
-              <option value="Bottle">Bottle</option>
-              <option value="Bag">Bag</option>
-              <option value="Roll">Roll</option>
+              <option value="pcs">Pieces</option>
+              <option value="kg">Kilograms</option>
+              <option value="g">Grams</option>
+              <option value="l">Liters</option>
+              <option value="ml">Milliliters</option>
+              <option value="box">Box</option>
+              <option value="pack">Pack</option>
+              <option value="set">Set</option>
+              <option value="pair">Pair</option>
+              <option value="dozen">Dozen</option>
             </select>
             {errors.unit && (
               <p className="text-red-500 text-sm mt-1">{errors.unit}</p>
@@ -294,33 +220,42 @@ export function AddProductModal({ isOpen, onClose, onAddProduct }: AddProductMod
           </div>
         </div>
 
-        {/* Profit Margin Display */}
-        {formData.purchasePrice > 0 && formData.sellPrice > formData.purchasePrice && (
-          <div className="p-3 rounded-lg" style={{ backgroundColor: theme.colors.accent }}>
-            <p className="text-sm">
-              <span className="font-medium">Profit Margin:</span>{' '}
-              ₹{(formData.sellPrice - formData.purchasePrice).toFixed(2)} ({' '}
-              {(((formData.sellPrice - formData.purchasePrice) / formData.purchasePrice) * 100).toFixed(1)}% )
-            </p>
-          </div>
-        )}
+        {/* Category */}
+        <div>
+          <label className="block text-sm font-medium mb-2">Category</label>
+          <input
+            type="text"
+            value={formData.category}
+            onChange={(e) => handleInputChange('category', e.target.value)}
+            placeholder="Enter category (e.g., Electronics, Clothing)"
+            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent"
+            style={{
+              borderColor: errors.category ? '#ef4444' : theme.colors.border,
+              backgroundColor: theme.colors.input,
+              color: theme.colors.foreground,
+            }}
+          />
+          {errors.category && (
+            <p className="text-red-500 text-sm mt-1">{errors.category}</p>
+          )}
+        </div>
 
-        {/* Form Actions */}
-        <div className="flex justify-end space-x-3 pt-4">
+        {/* Action Buttons */}
+        <div className="flex gap-3 pt-4">
           <button
             type="button"
             onClick={handleClose}
-            className="px-4 py-2 rounded-lg font-medium transition-colors hover:bg-opacity-80"
+            className="flex-1 px-4 py-2 border rounded-lg font-medium transition-colors hover:bg-gray-50"
             style={{
-              backgroundColor: theme.colors.secondary,
-              color: theme.colors.secondaryForeground,
+              borderColor: theme.colors.border,
+              color: theme.colors.foreground,
             }}
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-4 py-2 rounded-lg font-medium transition-colors hover:bg-opacity-90"
+            className="flex-1 px-4 py-2 rounded-lg font-medium transition-colors hover:opacity-90"
             style={{
               backgroundColor: theme.colors.primary,
               color: theme.colors.primaryForeground,

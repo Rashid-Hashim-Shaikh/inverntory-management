@@ -1,116 +1,239 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 
 export interface Product {
-  id: number;
+  id: string;
   name: string;
+  description: string;
   price: number;
-  image: string;
-  purchasePrice: number;
   quantity: number;
   unit: string;
+  category: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ProductFormData {
   name: string;
-  image: string;
-  purchasePrice: number;
-  sellPrice: number;
+  description: string;
+  price: number;
   quantity: number;
   unit: string;
+  category: string;
 }
 
 interface ProductStore {
   products: Product[];
-  addProduct: (productData: ProductFormData) => void;
-  updateProduct: (id: number, productData: Partial<Product>) => void;
-  deleteProduct: (id: number) => void;
-  getProductById: (id: number) => Product | undefined;
+  loading: boolean;
+  error: string | null;
+  
+  // API Actions
+  fetchProducts: (search?: string, category?: string) => Promise<void>;
+  addProduct: (productData: ProductFormData) => Promise<boolean>;
+  updateProduct: (id: string, productData: Partial<ProductFormData>) => Promise<boolean>;
+  deleteProduct: (id: string) => Promise<boolean>;
+  
+  // Local Actions
+  getProductById: (id: string) => Product | undefined;
   searchProducts: (searchTerm: string) => Product[];
-  initializeProducts: () => void;
-  updateInventory: (productId: number, quantityChange: number) => boolean;
+  updateInventory: (productId: string, quantityChange: number) => Promise<boolean>;
+  
+  // State Management
+  setLoading: (loading: boolean) => void;
+  setError: (error: string | null) => void;
+  clearError: () => void;
 }
 
-export const useProductStore = create<ProductStore>()(
-  persist(
-    (set, get) => ({
-      products: [],
+export const useProductStore = create<ProductStore>((set, get) => ({
+  products: [],
+  loading: false,
+  error: null,
+  
+  // API Actions
+  fetchProducts: async (search?: string, category?: string) => {
+    set({ loading: true, error: null });
+    
+    try {
+      const params = new URLSearchParams();
+      if (search) params.append('search', search);
+      if (category && category !== 'all') params.append('category', category);
       
-      addProduct: (productData: ProductFormData) => {
-        const newProduct: Product = {
-          id: Date.now(),
-          name: productData.name,
-          price: productData.sellPrice,
-          purchasePrice: productData.purchasePrice,
-          quantity: productData.quantity,
-          unit: productData.unit,
-          image: productData.image,
-        };
-        
-        set((state) => ({
-          products: [...state.products, newProduct],
-        }));
-      },
+      const response = await fetch(`/api/products?${params.toString()}`);
+      const data = await response.json();
       
-      updateProduct: (id: number, productData: Partial<Product>) => {
-        set((state) => ({
-          products: state.products.map((product) =>
-            product.id === id ? { ...product, ...productData } : product
-          ),
-        }));
-      },
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch products');
+      }
       
-      deleteProduct: (id: number) => {
-        set((state) => ({
-          products: state.products.filter((product) => product.id !== id),
-        }));
-      },
+      set({ products: data.products, loading: false });
+    } catch (error) {
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to fetch products',
+        loading: false 
+      });
+    }
+  },
+  
+  addProduct: async (productData: ProductFormData) => {
+    set({ loading: true, error: null });
+    
+    try {
+      const response = await fetch('/api/products', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(productData),
+      });
       
-      getProductById: (id: number) => {
-        return get().products.find((product) => product.id === id);
-      },
+      const data = await response.json();
       
-      searchProducts: (searchTerm: string) => {
-        const { products } = get();
-        if (!searchTerm.trim()) return products;
-        
-        return products.filter((product) =>
-          product.name.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-      },
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create product');
+      }
       
-      initializeProducts: () => {
-        // No longer initializing with default products
-        // Products will start empty and be added manually
-      },
+      // Add new product to the list
+      set((state) => ({
+        products: [data.product, ...state.products],
+        loading: false,
+      }));
+      
+      return true;
+    } catch (error) {
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to create product',
+        loading: false 
+      });
+      return false;
+    }
+  },
+  
+  updateProduct: async (id: string, productData: Partial<ProductFormData>) => {
+    set({ loading: true, error: null });
+    
+    try {
+      const response = await fetch(`/api/products/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(productData),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update product');
+      }
+      
+      // Update product in the list
+      set((state) => ({
+        products: state.products.map((product) =>
+          product.id === id ? data.product : product
+        ),
+        loading: false,
+      }));
+      
+      return true;
+    } catch (error) {
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to update product',
+        loading: false 
+      });
+      return false;
+    }
+  },
+  
+  deleteProduct: async (id: string) => {
+    set({ loading: true, error: null });
+    
+    try {
+      const response = await fetch(`/api/products/${id}`, {
+        method: 'DELETE',
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete product');
+      }
+      
+      // Remove product from the list
+      set((state) => ({
+        products: state.products.filter((product) => product.id !== id),
+        loading: false,
+      }));
+      
+      return true;
+    } catch (error) {
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to delete product',
+        loading: false 
+      });
+      return false;
+    }
+  },
+  
+  // Local Actions
+  getProductById: (id: string) => {
+    return get().products.find((product) => product.id === id);
+  },
+  
+  searchProducts: (searchTerm: string) => {
+    const { products } = get();
+    if (!searchTerm.trim()) return products;
+    
+    return products.filter((product) =>
+      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.description.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  },
+  
+  updateInventory: async (productId: string, quantityChange: number) => {
+    const { products } = get();
+    const product = products.find(p => p.id === productId);
+    
+    if (!product) {
+      return false; // Product not found
+    }
 
-      updateInventory: (productId: number, quantityChange: number) => {
-        const { products } = get();
-        const product = products.find(p => p.id === productId);
-        
-        if (!product) {
-          return false; // Product not found
-        }
+    const newQuantity = product.quantity + quantityChange;
+    
+    if (newQuantity < 0) {
+      return false; // Cannot have negative inventory
+    }
 
-        const newQuantity = product.quantity + quantityChange;
-        
-        if (newQuantity < 0) {
-          return false; // Cannot have negative inventory
-        }
+    // Update locally first for immediate UI feedback
+    set((state) => ({
+      products: state.products.map((p) =>
+        p.id === productId ? { ...p, quantity: newQuantity } : p
+      ),
+    }));
 
+    // Then update on server
+    try {
+      const success = await get().updateProduct(productId, { quantity: newQuantity });
+      if (!success) {
+        // Revert local change if server update failed
         set((state) => ({
           products: state.products.map((p) =>
-            p.id === productId ? { ...p, quantity: newQuantity } : p
+            p.id === productId ? { ...p, quantity: product.quantity } : p
           ),
         }));
-
-        return true; // Success
-      },
-    }),
-    {
-      name: 'inventory-products-storage',
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ products: state.products }),
-    }
-  )
-); 
+        return false;
+      }
+      return true;
+         } catch {
+       // Revert local change if server update failed
+       set((state) => ({
+         products: state.products.map((p) =>
+           p.id === productId ? { ...p, quantity: product.quantity } : p
+         ),
+       }));
+       return false;
+     }
+  },
+  
+  // State Management
+  setLoading: (loading: boolean) => set({ loading }),
+  setError: (error: string | null) => set({ error }),
+  clearError: () => set({ error: null }),
+})); 
