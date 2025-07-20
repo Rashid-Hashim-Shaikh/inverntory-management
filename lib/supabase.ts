@@ -14,7 +14,7 @@ export const TABLES = {
   TRANSACTIONS: 'transactions',
 } as const;
 
-// Database types
+// Database types with user_id
 export interface Database {
   public: {
     Tables: {
@@ -27,7 +27,9 @@ export interface Database {
           quantity: number;
           unit: string;
           category: string;
+          user_id: string;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
@@ -37,7 +39,9 @@ export interface Database {
           quantity: number;
           unit: string;
           category: string;
+          user_id?: string;
           created_at?: string;
+          updated_at?: string;
         };
         Update: {
           id?: string;
@@ -47,7 +51,9 @@ export interface Database {
           quantity?: number;
           unit?: string;
           category?: string;
+          user_id?: string;
           created_at?: string;
+          updated_at?: string;
         };
       };
       customers: {
@@ -57,7 +63,9 @@ export interface Database {
           email: string;
           mobile: string;
           address: string;
+          user_id: string;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
@@ -65,7 +73,9 @@ export interface Database {
           email: string;
           mobile: string;
           address: string;
+          user_id?: string;
           created_at?: string;
+          updated_at?: string;
         };
         Update: {
           id?: string;
@@ -73,7 +83,9 @@ export interface Database {
           email?: string;
           mobile?: string;
           address?: string;
+          user_id?: string;
           created_at?: string;
+          updated_at?: string;
         };
       };
       suppliers: {
@@ -83,7 +95,9 @@ export interface Database {
           email: string;
           mobile: string;
           address: string;
+          user_id: string;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
@@ -91,7 +105,9 @@ export interface Database {
           email: string;
           mobile: string;
           address: string;
+          user_id?: string;
           created_at?: string;
+          updated_at?: string;
         };
         Update: {
           id?: string;
@@ -99,7 +115,9 @@ export interface Database {
           email?: string;
           mobile?: string;
           address?: string;
+          user_id?: string;
           created_at?: string;
+          updated_at?: string;
         };
       };
       transactions: {
@@ -115,7 +133,9 @@ export interface Database {
           total_items: number;
           total_quantity: number;
           status: 'completed' | 'pending' | 'cancelled';
+          user_id: string;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
@@ -128,8 +148,10 @@ export interface Database {
           total_amount: number;
           total_items: number;
           total_quantity: number;
-          status: 'completed' | 'pending' | 'cancelled';
+          status?: 'completed' | 'pending' | 'cancelled';
+          user_id?: string;
           created_at?: string;
+          updated_at?: string;
         };
         Update: {
           id?: string;
@@ -143,9 +165,13 @@ export interface Database {
           total_items?: number;
           total_quantity?: number;
           status?: 'completed' | 'pending' | 'cancelled';
+          user_id?: string;
           created_at?: string;
+          updated_at?: string;
         };
       };
     };
   };
-}; 
+};
+
+ 

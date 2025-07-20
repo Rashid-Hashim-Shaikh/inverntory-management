@@ -1,6 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { TABLES } from '@/lib/supabase';
+
+// Helper function to get authenticated user from JWT
+async function getAuthenticatedUser(request: NextRequest) {
+  const authHeader = request.headers.get('authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
+  
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) {
+      return null;
+    }
+    return user;
+  } catch (error) {
+    console.error('Error verifying JWT:', error);
+    return null;
+  }
+}
 
 // GET /api/products/[id] - Get single product
 export async function GET(
@@ -9,7 +31,20 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
-    const { data, error } = await supabase
+    const user = await getAuthenticatedUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.substring(7) || '';
+    const supabaseClient = createServerSupabaseClient(token);
+
+    const { data, error } = await supabaseClient
       .from(TABLES.PRODUCTS)
       .select('*')
       .eq('id', id)
@@ -40,27 +75,57 @@ export async function PUT(
 ) {
   const { id } = await params;
   try {
+    const user = await getAuthenticatedUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.substring(7) || '';
+    const supabaseClient = createServerSupabaseClient(token);
+
     const body = await request.json();
     const { name, description, price, quantity, unit, category } = body;
 
-    // Validation
-    if (!name || price === undefined || price === null || quantity === undefined || quantity === null) {
+    // Get existing product data for partial updates
+    const { data: existingProduct, error: fetchError } = await supabaseClient
+      .from(TABLES.PRODUCTS)
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !existingProduct) {
+      return NextResponse.json(
+        { error: 'Product not found' },
+        { status: 404 }
+      );
+    }
+
+    // Merge with existing data for partial updates
+    const updateData = {
+      name: name ?? existingProduct.name,
+      description: description ?? existingProduct.description,
+      price: price !== undefined ? parseFloat(price) : existingProduct.price,
+      quantity: quantity !== undefined ? parseInt(quantity) : existingProduct.quantity,
+      unit: unit ?? existingProduct.unit,
+      category: category ?? existingProduct.category,
+    };
+
+    // Validation for required fields
+    if (!updateData.name || updateData.price === undefined || updateData.quantity === undefined) {
       return NextResponse.json(
         { error: 'Name, price, and quantity are required' },
         { status: 400 }
       );
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from(TABLES.PRODUCTS)
-      .update({
-        name,
-        description: description || '',
-        price: parseFloat(price),
-        quantity: parseInt(quantity),
-        unit: unit || 'pcs',
-        category: category || 'General',
-      })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();
@@ -90,7 +155,20 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
-    const { error } = await supabase
+    const user = await getAuthenticatedUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.substring(7) || '';
+    const supabaseClient = createServerSupabaseClient(token);
+
+    const { error } = await supabaseClient
       .from(TABLES.PRODUCTS)
       .delete()
       .eq('id', id);

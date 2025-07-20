@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { authenticatedFetch } from '@/lib/auth-utils';
 import { CartItem } from './cart';
 import { Customer } from './customers';
 import { Supplier } from './suppliers';
@@ -68,7 +69,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       if (status && status !== 'all') params.append('status', status);
       if (type && type !== 'all') params.append('type', type);
       
-      const response = await fetch(`/api/transactions?${params.toString()}`);
+      const response = await authenticatedFetch(`/api/transactions?${params.toString()}`);
       const data = await response.json();
       
       if (!response.ok) {
@@ -131,11 +132,8 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
         status: transactionData.status || 'completed',
       };
 
-      const response = await fetch('/api/transactions', {
+      const response = await authenticatedFetch('/api/transactions', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(apiData),
       });
       
@@ -181,11 +179,8 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
     set({ loading: true, error: null });
     
     try {
-      const response = await fetch(`/api/transactions/${id}`, {
+      const response = await authenticatedFetch(`/api/transactions/${id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ status }),
       });
       
@@ -247,11 +242,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
     if (!searchTerm.trim()) return transactions;
     
     return transactions.filter((transaction) =>
-      transaction.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transaction.customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transaction.supplier?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transaction.customer?.mobile.includes(searchTerm) ||
-      transaction.supplier?.mobile.includes(searchTerm)
+      transaction.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase())
     );
   },
   

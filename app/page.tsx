@@ -10,6 +10,7 @@ import {
 import { StatsCard } from "@/components/ui/stats-card";
 import { BarChart } from "@/components/ui/bar-chart";
 import { useProductStore } from "@/lib/store/products";
+import { ProtectedRoute } from "@/components/protected-route";
 
 export default function Home() {
   const { products } = useProductStore();
@@ -52,13 +53,14 @@ export default function Home() {
       .slice(0, 7); // Show max 7 categories
   }, [products]);
   return (
-    <div className="flex flex-col p-6 md:p-8 overflow-auto h-full">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          Welcome to your inventory dashboard.
-        </p>
-      </div>
+    <ProtectedRoute>
+      <div className="flex flex-col p-6 md:p-8 overflow-auto h-full">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">
+            Welcome to your inventory dashboard.
+          </p>
+        </div>
 
       <div className="grid gap-6 mt-6 md:grid-cols-2 lg:grid-cols-4">
         <StatsCard
@@ -113,5 +115,6 @@ export default function Home() {
         />
       </div>
     </div>
+    </ProtectedRoute>
   );
 }

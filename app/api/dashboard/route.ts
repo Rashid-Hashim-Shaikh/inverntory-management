@@ -1,10 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { TABLES } from '@/lib/supabase';
+
+// Helper function to get authenticated user from JWT
+async function getAuthenticatedUser(request: NextRequest) {
+  const authHeader = request.headers.get('authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
+  
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) {
+      return null;
+    }
+    return user;
+  } catch (error) {
+    console.error('Error verifying JWT:', error);
+    return null;
+  }
+}
 
 // GET /api/dashboard - Get dashboard analytics
 export async function GET(request: NextRequest) {
   try {
+    const user = await getAuthenticatedUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.substring(7) || '';
+    const supabaseClient = createServerSupabaseClient(token);
+
     const { searchParams } = new URL(request.url);
     const period = searchParams.get('period') || '30'; // days
 
@@ -14,29 +49,29 @@ export async function GET(request: NextRequest) {
     periodStart.setDate(now.getDate() - parseInt(period));
 
     // Get total products count
-    const { count: totalProducts } = await supabase
+    const { count: totalProducts } = await supabaseClient
       .from(TABLES.PRODUCTS)
       .select('*', { count: 'exact', head: true });
 
     // Get low stock products (quantity < 10)
-    const { data: lowStockProducts } = await supabase
+    const { data: lowStockProducts } = await supabaseClient
       .from(TABLES.PRODUCTS)
       .select('*')
       .lt('quantity', 10)
       .order('quantity', { ascending: true });
 
     // Get total customers count
-    const { count: totalCustomers } = await supabase
+    const { count: totalCustomers } = await supabaseClient
       .from(TABLES.CUSTOMERS)
       .select('*', { count: 'exact', head: true });
 
     // Get total suppliers count
-    const { count: totalSuppliers } = await supabase
+    const { count: totalSuppliers } = await supabaseClient
       .from(TABLES.SUPPLIERS)
       .select('*', { count: 'exact', head: true });
 
     // Get transactions for the period
-    const { data: transactions } = await supabase
+    const { data: transactions } = await supabaseClient
       .from(TABLES.TRANSACTIONS)
       .select('*')
       .gte('date', periodStart.toISOString().split('T')[0])
@@ -72,14 +107,14 @@ export async function GET(request: NextRequest) {
     }));
 
     // Get top selling products
-    const { data: topProducts } = await supabase
+    const { data: topProducts } = await supabaseClient
       .from(TABLES.PRODUCTS)
       .select('*')
       .order('quantity', { ascending: false })
       .limit(5);
 
     // Get recent transactions
-    const { data: recentTransactions } = await supabase
+    const { data: recentTransactions } = await supabaseClient
       .from(TABLES.TRANSACTIONS)
       .select(`
         *,

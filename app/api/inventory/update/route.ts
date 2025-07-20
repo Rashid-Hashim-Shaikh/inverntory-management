@@ -1,10 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { TABLES } from '@/lib/supabase';
+
+// Helper function to get authenticated user from JWT
+async function getAuthenticatedUser(request: NextRequest) {
+  const authHeader = request.headers.get('authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
+  
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) {
+      return null;
+    }
+    return user;
+  } catch (error) {
+    console.error('Error verifying JWT:', error);
+    return null;
+  }
+}
 
 // POST /api/inventory/update - Update inventory based on transaction
 export async function POST(request: NextRequest) {
   try {
+    const user = await getAuthenticatedUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.substring(7) || '';
+    const supabaseClient = createServerSupabaseClient(token);
+
     const body = await request.json();
     const { items, type } = body;
 
@@ -29,7 +64,7 @@ export async function POST(request: NextRequest) {
     for (const item of items) {
       try {
         // Get current product
-        const { data: product, error: fetchError } = await supabase
+        const { data: product, error: fetchError } = await supabaseClient
           .from(TABLES.PRODUCTS)
           .select('*')
           .eq('id', item.productId)
@@ -55,7 +90,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Update product quantity
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseClient
           .from(TABLES.PRODUCTS)
           .update({ quantity: newQuantity })
           .eq('id', item.productId);

@@ -1,10 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { TABLES } from '@/lib/supabase';
+
+// Helper function to get authenticated user from JWT
+async function getAuthenticatedUser(request: NextRequest) {
+  const authHeader = request.headers.get('authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
+  
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) {
+      return null;
+    }
+    return user;
+  } catch (error) {
+    console.error('Error verifying JWT:', error);
+    return null;
+  }
+}
 
 // GET /api/transactions - Get all transactions
 export async function GET(request: NextRequest) {
   try {
+    const user = await getAuthenticatedUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.substring(7) || '';
+    const supabaseClient = createServerSupabaseClient(token);
+
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
     const status = searchParams.get('status');
@@ -12,7 +47,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    let query = supabase
+    let query = supabaseClient
       .from(TABLES.TRANSACTIONS)
       .select(`
         *,
@@ -60,6 +95,19 @@ export async function GET(request: NextRequest) {
 // POST /api/transactions - Create new transaction
 export async function POST(request: NextRequest) {
   try {
+    const user = await getAuthenticatedUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.substring(7) || '';
+    const supabaseClient = createServerSupabaseClient(token);
+
     const body = await request.json();
     const {
       type,
@@ -83,7 +131,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if invoice number already exists
-    const { data: existingTransaction } = await supabase
+    const { data: existingTransaction } = await supabaseClient
       .from(TABLES.TRANSACTIONS)
       .select('id')
       .eq('invoice_number', invoice_number)
@@ -108,20 +156,23 @@ export async function POST(request: NextRequest) {
       return dateString; // Return as-is if not in expected format
     };
 
-    const { data, error } = await supabase
+    const transactionData = {
+      type,
+      invoice_number,
+      date: convertDate(date),
+      customer_id: customer_id || null,
+      supplier_id: supplier_id || null,
+      items,
+      total_amount: parseFloat(total_amount),
+      total_items: parseInt(total_items) || items.length,
+      total_quantity: parseInt(total_quantity) || items.reduce((sum: number, item: { quantity: number }) => sum + item.quantity, 0),
+      status: status || 'completed',
+      // user_id will be auto-assigned by the database trigger
+    };
+
+    const { data, error } = await supabaseClient
       .from(TABLES.TRANSACTIONS)
-      .insert({
-        type,
-        invoice_number,
-        date: convertDate(date),
-        customer_id: customer_id || null,
-        supplier_id: supplier_id || null,
-        items,
-        total_amount: parseFloat(total_amount),
-        total_items: parseInt(total_items) || items.length,
-        total_quantity: parseInt(total_quantity) || items.reduce((sum: number, item: { quantity: number }) => sum + item.quantity, 0),
-        status: status || 'completed',
-      })
+      .insert(transactionData)
       .select(`
         *,
         customer:customers(id, name, mobile),

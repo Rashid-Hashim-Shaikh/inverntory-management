@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { authenticatedFetch } from '@/lib/auth-utils';
 
 export interface Customer {
   id: string;
@@ -51,7 +52,7 @@ export const useCustomerStore = create<CustomerStore>((set, get) => ({
       const params = new URLSearchParams();
       if (search) params.append('search', search);
       
-      const response = await fetch(`/api/customers?${params.toString()}`);
+      const response = await authenticatedFetch(`/api/customers?${params.toString()}`);
       const data = await response.json();
       
       if (!response.ok) {
@@ -71,11 +72,8 @@ export const useCustomerStore = create<CustomerStore>((set, get) => ({
     set({ loading: true, error: null });
     
     try {
-      const response = await fetch('/api/customers', {
+      const response = await authenticatedFetch('/api/customers', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(customerData),
       });
       
@@ -105,11 +103,8 @@ export const useCustomerStore = create<CustomerStore>((set, get) => ({
     set({ loading: true, error: null });
     
     try {
-      const response = await fetch(`/api/customers/${id}`, {
+      const response = await authenticatedFetch(`/api/customers/${id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(customerData),
       });
       
@@ -141,7 +136,7 @@ export const useCustomerStore = create<CustomerStore>((set, get) => ({
     set({ loading: true, error: null });
     
     try {
-      const response = await fetch(`/api/customers/${id}`, {
+      const response = await authenticatedFetch(`/api/customers/${id}`, {
         method: 'DELETE',
       });
       

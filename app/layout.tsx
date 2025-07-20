@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { AuthProvider } from "@/lib/auth-context";
+import { LayoutWrapper } from "@/components/layout-wrapper";
 // import { ThemeProvider } from "next-themes";
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,25 +32,23 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen overflow-hidden`}
       >
         {/* <ThemeProvider attribute="class" defaultTheme="system" enableSystem> */}
-        <SidebarProvider>
-          <AppSidebar />
-          <main className="h-screen w-full overflow-y-auto">
-            <SidebarTrigger />
+        <AuthProvider>
+          <LayoutWrapper>
             {children}
-          </main>
-        </SidebarProvider>
-        <ToastContainer
-          position="top-right"
-          autoClose={4000}
-          hideProgressBar={false}
-          newestOnTop={false}
-          closeOnClick
-          rtl={false}
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-          theme="light"
-        />
+          </LayoutWrapper>
+          <ToastContainer
+            position="top-right"
+            autoClose={4000}
+            hideProgressBar={false}
+            newestOnTop={false}
+            closeOnClick
+            rtl={false}
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+            theme="light"
+          />
+        </AuthProvider>
         {/* </ThemeProvider> */}
       </body>
     </html>

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useSidebar } from "./ui/sidebar";
 import { cn } from "@/lib/utils";
+import { UserProfile } from "./user-profile";
 
 const navItems = [
   { label: "Dashboard", icon: LucideLayoutDashboard, href: "/" },
@@ -67,19 +68,7 @@ export function AppSidebar() {
       </nav>
       
       <div className="p-4 border-t dark:border-neutral-800">
-        {isOpen ? (
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-full bg-neutral-200 dark:bg-neutral-800" />
-            <div>
-              <p className="text-sm font-medium">Admin User</p>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">admin@example.com</p>
-            </div>
-          </div>
-        ) : (
-          <div className="flex justify-center">
-            <div className="h-9 w-9 rounded-full bg-neutral-200 dark:bg-neutral-800" />
-          </div>
-        )}
+        <UserProfile />
       </div>
     </aside>
   );

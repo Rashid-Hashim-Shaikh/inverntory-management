@@ -1,6 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { TABLES } from '@/lib/supabase';
+
+// Helper function to get authenticated user from JWT
+async function getAuthenticatedUser(request: NextRequest) {
+  const authHeader = request.headers.get('authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
+  
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) {
+      return null;
+    }
+    return user;
+  } catch (error) {
+    console.error('Error verifying JWT:', error);
+    return null;
+  }
+}
 
 // GET /api/suppliers/[id] - Get single supplier
 export async function GET(
@@ -8,7 +30,20 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { data, error } = await supabase
+    const user = await getAuthenticatedUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.substring(7) || '';
+    const supabaseClient = createServerSupabaseClient(token);
+
+    const { data, error } = await supabaseClient
       .from(TABLES.SUPPLIERS)
       .select('*')
       .eq('id', params.id)
@@ -38,6 +73,19 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    const user = await getAuthenticatedUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.substring(7) || '';
+    const supabaseClient = createServerSupabaseClient(token);
+
     const body = await request.json();
     const { name, email, mobile, address } = body;
 
@@ -50,7 +98,7 @@ export async function PUT(
     }
 
     // Check if mobile already exists for other suppliers
-    const { data: existingSupplier } = await supabase
+    const { data: existingSupplier } = await supabaseClient
       .from(TABLES.SUPPLIERS)
       .select('id')
       .eq('mobile', mobile)
@@ -64,7 +112,7 @@ export async function PUT(
       );
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from(TABLES.SUPPLIERS)
       .update({
         name,
@@ -100,7 +148,20 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { error } = await supabase
+    const user = await getAuthenticatedUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.substring(7) || '';
+    const supabaseClient = createServerSupabaseClient(token);
+
+    const { error } = await supabaseClient
       .from(TABLES.SUPPLIERS)
       .delete()
       .eq('id', params.id);

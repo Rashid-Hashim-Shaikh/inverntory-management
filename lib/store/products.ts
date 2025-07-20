@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { authenticatedFetch } from '@/lib/auth-utils';
 
 export interface Product {
   id: string;
@@ -57,7 +58,7 @@ export const useProductStore = create<ProductStore>((set, get) => ({
       if (search) params.append('search', search);
       if (category && category !== 'all') params.append('category', category);
       
-      const response = await fetch(`/api/products?${params.toString()}`);
+      const response = await authenticatedFetch(`/api/products?${params.toString()}`);
       const data = await response.json();
       
       if (!response.ok) {
@@ -77,11 +78,8 @@ export const useProductStore = create<ProductStore>((set, get) => ({
     set({ loading: true, error: null });
     
     try {
-      const response = await fetch('/api/products', {
+      const response = await authenticatedFetch('/api/products', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(productData),
       });
       
@@ -111,11 +109,8 @@ export const useProductStore = create<ProductStore>((set, get) => ({
     set({ loading: true, error: null });
     
     try {
-      const response = await fetch(`/api/products/${id}`, {
+      const response = await authenticatedFetch(`/api/products/${id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(productData),
       });
       
@@ -147,7 +142,7 @@ export const useProductStore = create<ProductStore>((set, get) => ({
     set({ loading: true, error: null });
     
     try {
-      const response = await fetch(`/api/products/${id}`, {
+      const response = await authenticatedFetch(`/api/products/${id}`, {
         method: 'DELETE',
       });
       
@@ -198,45 +193,22 @@ export const useProductStore = create<ProductStore>((set, get) => ({
     const newQuantity = product.quantity + quantityChange;
     
     if (newQuantity < 0) {
-      return false; // Cannot have negative inventory
+      return false; // Cannot have negative quantity
     }
 
-    // Update locally first for immediate UI feedback
-    set((state) => ({
-      products: state.products.map((p) =>
-        p.id === productId ? { ...p, quantity: newQuantity } : p
-      ),
-    }));
-
-    // Then update on server with all required fields
-    try {
-      const success = await get().updateProduct(productId, { 
-        name: product.name,
-        price: product.price,
-        quantity: newQuantity,
-        description: product.description,
-        unit: product.unit,
-        category: product.category
-      });
-      if (!success) {
-        // Revert local change if server update failed
-        set((state) => ({
-          products: state.products.map((p) =>
-            p.id === productId ? { ...p, quantity: product.quantity } : p
-          ),
-        }));
-        return false;
-      }
-      return true;
-    } catch {
-      // Revert local change if server update failed
+    // Update the product quantity
+    const success = await get().updateProduct(productId, { quantity: newQuantity });
+    
+    if (success) {
+      // Update local state immediately for better UX
       set((state) => ({
         products: state.products.map((p) =>
-          p.id === productId ? { ...p, quantity: product.quantity } : p
+          p.id === productId ? { ...p, quantity: newQuantity } : p
         ),
       }));
-      return false;
     }
+    
+    return success;
   },
   
   // State Management

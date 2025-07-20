@@ -1,14 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { createServerSupabaseClient } from '@/lib/supabase-server';
 import { TABLES } from '@/lib/supabase';
+
+// Helper function to get authenticated user from JWT
+async function getAuthenticatedUser(request: NextRequest) {
+  const authHeader = request.headers.get('authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
+  
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) {
+      return null;
+    }
+    return user;
+  } catch (error) {
+    console.error('Error verifying JWT:', error);
+    return null;
+  }
+}
 
 // GET /api/customers - Get all customers
 export async function GET(request: NextRequest) {
   try {
+    const user = await getAuthenticatedUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.substring(7) || '';
+    const supabaseClient = createServerSupabaseClient(token);
+
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
 
-    let query = supabase
+    let query = supabaseClient
       .from(TABLES.CUSTOMERS)
       .select('*')
       .order('created_at', { ascending: false });
@@ -41,6 +76,19 @@ export async function GET(request: NextRequest) {
 // POST /api/customers - Create new customer
 export async function POST(request: NextRequest) {
   try {
+    const user = await getAuthenticatedUser(request);
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.substring(7) || '';
+    const supabaseClient = createServerSupabaseClient(token);
+
     const body = await request.json();
     const { name, email, mobile, address } = body;
 
@@ -53,7 +101,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if mobile already exists
-    const { data: existingCustomer } = await supabase
+    const { data: existingCustomer } = await supabaseClient
       .from(TABLES.CUSTOMERS)
       .select('id')
       .eq('mobile', mobile)
@@ -66,14 +114,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data, error } = await supabase
+    const customerData = {
+      name,
+      email: email || '',
+      mobile,
+      address: address || '',
+      // user_id will be auto-assigned by the database trigger
+    };
+
+    const { data, error } = await supabaseClient
       .from(TABLES.CUSTOMERS)
-      .insert({
-        name,
-        email: email || '',
-        mobile,
-        address: address || '',
-      })
+      .insert(customerData)
       .select()
       .single();
 

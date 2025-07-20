@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { authenticatedFetch } from '@/lib/auth-utils';
 
 export interface Supplier {
   id: string;
@@ -51,7 +52,7 @@ export const useSupplierStore = create<SupplierStore>((set, get) => ({
       const params = new URLSearchParams();
       if (search) params.append('search', search);
       
-      const response = await fetch(`/api/suppliers?${params.toString()}`);
+      const response = await authenticatedFetch(`/api/suppliers?${params.toString()}`);
       const data = await response.json();
       
       if (!response.ok) {
@@ -71,11 +72,8 @@ export const useSupplierStore = create<SupplierStore>((set, get) => ({
     set({ loading: true, error: null });
     
     try {
-      const response = await fetch('/api/suppliers', {
+      const response = await authenticatedFetch('/api/suppliers', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(supplierData),
       });
       
@@ -105,11 +103,8 @@ export const useSupplierStore = create<SupplierStore>((set, get) => ({
     set({ loading: true, error: null });
     
     try {
-      const response = await fetch(`/api/suppliers/${id}`, {
+      const response = await authenticatedFetch(`/api/suppliers/${id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(supplierData),
       });
       
@@ -141,7 +136,7 @@ export const useSupplierStore = create<SupplierStore>((set, get) => ({
     set({ loading: true, error: null });
     
     try {
-      const response = await fetch(`/api/suppliers/${id}`, {
+      const response = await authenticatedFetch(`/api/suppliers/${id}`, {
         method: 'DELETE',
       });
       
