@@ -4,10 +4,10 @@ import { Product } from './products';
 
 export interface CartItem {
   id: string; // Unique cart item ID
-  productId: number;
+  productId: string;
   product: Product;
   quantity: number;
-  purchasePrice: number;
+  price: number;
   type: 'in' | 'out';
   addedAt: number;
 }
@@ -17,15 +17,17 @@ interface CartStore {
   isOpen: boolean;
   addToCart: (product: Product, type: 'in' | 'out', quantity?: number) => void;
   removeFromCart: (itemId: string) => void;
-  updateCartItem: (itemId: string, updates: Partial<Pick<CartItem, 'quantity' | 'purchasePrice'>>) => void;
+  updateCartItem: (itemId: string, updates: Partial<Pick<CartItem, 'quantity' | 'price'>>) => void;
   clearCart: () => void;
   toggleCart: () => void;
   setCartOpen: (open: boolean) => void;
   getTotalItems: () => number;
   getTotalValue: () => number;
   getCartItemsByType: (type: 'in' | 'out') => CartItem[];
-  processCart: (updateInventory: (productId: number, quantityChange: number) => boolean) => { success: boolean; errors: string[] };
+  processCart: (updateInventory: (productId: string, quantityChange: number) => Promise<boolean>) => Promise<{ success: boolean; errors: string[] }>;
 }
+
+
 
 export const useCartStore = create<CartStore>()(
   persist(
@@ -61,7 +63,7 @@ export const useCartStore = create<CartStore>()(
               productId: product.id,
               product,
               quantity,
-              purchasePrice: type === 'in' ? product.purchasePrice : product.price,
+              price: product.price,
               type,
               addedAt: Date.now(),
             };
@@ -80,7 +82,7 @@ export const useCartStore = create<CartStore>()(
         }));
       },
 
-      updateCartItem: (itemId: string, updates: Partial<Pick<CartItem, 'quantity' | 'purchasePrice'>>) => {
+      updateCartItem: (itemId: string, updates: Partial<Pick<CartItem, 'quantity' | 'price'>>) => {
         set((state) => ({
           items: state.items.map((item) =>
             item.id === itemId ? { ...item, ...updates } : item
@@ -106,7 +108,7 @@ export const useCartStore = create<CartStore>()(
 
       getTotalValue: () => {
         return get().items.reduce((total, item) => {
-          return total + (item.purchasePrice * item.quantity);
+          return total + (item.price * item.quantity);
         }, 0);
       },
 
@@ -114,7 +116,7 @@ export const useCartStore = create<CartStore>()(
         return get().items.filter((item) => item.type === type);
       },
 
-      processCart: (updateInventory: (productId: number, quantityChange: number) => boolean) => {
+      processCart: async (updateInventory: (productId: string, quantityChange: number) => Promise<boolean>) => {
         const { items } = get();
         const errors: string[] = [];
 
@@ -124,7 +126,7 @@ export const useCartStore = create<CartStore>()(
           // For 'out' operations, remove from inventory (-)
           const quantityChange = item.type === 'in' ? item.quantity : -item.quantity;
           
-          const success = updateInventory(item.productId, quantityChange);
+          const success = await updateInventory(item.productId, quantityChange);
           
           if (!success) {
             const operation = item.type === 'in' ? 'stock in' : 'stock out';
@@ -147,6 +149,12 @@ export const useCartStore = create<CartStore>()(
       name: 'inventory-cart-storage',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ items: state.items }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          // Clear cart to avoid migration issues
+          state.items = [];
+        }
+      },
     }
   )
 ); 

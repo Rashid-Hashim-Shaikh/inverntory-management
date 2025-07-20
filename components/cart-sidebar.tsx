@@ -5,10 +5,12 @@ import { useRouter } from 'next/navigation';
 import { X, Plus, Minus, ShoppingCart, Trash2, IndianRupee, Check, AlertCircle } from 'lucide-react';
 import { useCartStore, CartItem } from '@/lib/store/cart';
 import { useProductStore } from '@/lib/store/products';
+import { useTransactionStore } from '@/lib/store/transactions';
 import { useTheme } from '@/lib/use-theme';
 import { ContactSelectionModal } from '@/components/contact-selection-modal';
 import { Customer } from '@/lib/store/customers';
 import { Supplier } from '@/lib/store/suppliers';
+import { CartCount } from '@/components/cart-count';
 
 export function CartSidebar() {
   const theme = useTheme();
@@ -20,23 +22,24 @@ export function CartSidebar() {
     updateCartItem,
     clearCart,
     setCartOpen,
-    getTotalItems,
     getTotalValue,
     getCartItemsByType,
     processCart,
   } = useCartStore();
 
   const { updateInventory } = useProductStore();
+  const { addTransaction } = useTransactionStore();
 
   const [editingItem, setEditingItem] = useState<string | null>(null);
-  const [editValues, setEditValues] = useState<{ quantity: number; purchasePrice: number }>({
+  const [editValues, setEditValues] = useState<{ quantity: number; price: number }>({
     quantity: 1,
-    purchasePrice: 0,
+    price: 0,
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [processResult, setProcessResult] = useState<{ success: boolean; errors: string[] } | null>(null);
   const [showContactModal, setShowContactModal] = useState(false);
   const [contactType, setContactType] = useState<'customer' | 'supplier'>('customer');
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
 
 
   const inItems = getCartItemsByType('in');
@@ -46,7 +49,7 @@ export function CartSidebar() {
     setEditingItem(item.id);
     setEditValues({
       quantity: item.quantity,
-      purchasePrice: item.purchasePrice,
+      price: item.price,
     });
   };
 
@@ -119,26 +122,71 @@ export function CartSidebar() {
       return;
     }
 
-    // Process the cart with selected contact(s)
-    processCartWithContact();
+    // If we selected a supplier, store it and process the cart
+    if (contactType === 'supplier' && 'email' in contact) {
+      setSelectedSupplier(contact as Supplier);
+      // Process cart with the selected supplier
+      processCartWithContact(contact as Supplier);
+    } else {
+      // Process the cart with selected contact(s)
+      processCartWithContact();
+    }
   };
 
-  const processCartWithContact = async () => {
+  const processCartWithContact = async (supplier?: Supplier) => {
     setIsProcessing(true);
     setProcessResult(null);
 
     try {
-      const result = processCart(updateInventory);
+      const result = await processCart(updateInventory);
       setProcessResult(result);
       
       if (result.success) {
+        // Create transaction for purchase/supplier transactions
+        const currentSupplier = supplier || selectedSupplier;
+        console.log('Processing cart - inItems:', inItems.length, 'currentSupplier:', currentSupplier?.id);
+        
+        if (inItems.length > 0 && currentSupplier) {
+          console.log('Creating purchase transaction for supplier:', currentSupplier.id);
+          const invoiceNumber = `PUR-${Date.now()}`;
+          const currentDate = new Date().toLocaleDateString('en-IN');
+          const totalAmount = inItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+          
+          console.log('Purchase transaction data:', {
+            type: 'purchase',
+            invoiceNumber,
+            date: currentDate,
+            supplierId: currentSupplier.id,
+            totalAmount,
+            totalItems: inItems.length,
+            totalQuantity: inItems.reduce((sum, item) => sum + item.quantity, 0),
+          });
+          
+          const success = await addTransaction({
+            type: 'purchase',
+            invoiceNumber,
+            date: currentDate,
+            supplierId: currentSupplier.id,
+            items: inItems,
+            totalAmount,
+            totalItems: inItems.length,
+            totalQuantity: inItems.reduce((sum, item) => sum + item.quantity, 0),
+            status: 'completed',
+          });
+          
+          console.log('Purchase transaction created:', success);
+        } else {
+          console.log('No purchase transaction created - inItems:', inItems.length, 'currentSupplier:', currentSupplier?.id);
+        }
+        
         // Auto-close cart after successful processing
         setTimeout(() => {
           setCartOpen(false);
           setProcessResult(null);
         }, 2000);
       }
-    } catch {
+    } catch (error) {
+      console.error('Error processing cart:', error);
       setProcessResult({
         success: false,
         errors: ['An unexpected error occurred while processing the cart.'],
@@ -161,15 +209,9 @@ export function CartSidebar() {
       >
         {/* Product Info */}
         <div className="flex items-center gap-3 mb-2">
-          <img
-            src={item.product.image}
-            alt={item.product.name}
-            className="w-12 h-12 object-cover rounded"
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0yMCAxOEwyOCAyNkgyMEgxNkwyMCAxOFoiIGZpbGw9IiNEMUQ1REIiLz4KPHBhdGggZD0iTTIwIDE4TDE2IDI2SDI4TDIwIDE4WiIgZmlsbD0iIzlDQTNBRiIvPgo8L3N2Zz4K';
-            }}
-          />
+          <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center">
+            <div className="text-2xl">📦</div>
+          </div>
           <div className="flex-1">
             <h4 className="font-medium text-sm line-clamp-1" style={{ color: theme.colors.foreground }}>
               {item.product.name}
@@ -228,9 +270,9 @@ export function CartSidebar() {
                 <IndianRupee className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
                 <input
                   type="number"
-                  value={editValues.purchasePrice}
+                  value={editValues.price}
                   onChange={(e) =>
-                    setEditValues(prev => ({ ...prev, purchasePrice: parseFloat(e.target.value) || 0 }))
+                    setEditValues(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))
                   }
                   min="0"
                   step="0.01"
@@ -301,7 +343,7 @@ export function CartSidebar() {
                 Unit Price:
               </span>
               <span className="text-sm font-medium" style={{ color: theme.colors.primary }}>
-                ₹{item.purchasePrice.toLocaleString()}
+                ₹{item.price.toLocaleString()}
               </span>
             </div>
 
@@ -309,7 +351,7 @@ export function CartSidebar() {
             <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: theme.colors.border }}>
               <span className="text-sm font-medium">Total:</span>
               <span className="text-sm font-bold" style={{ color: theme.colors.primary }}>
-                ₹{(item.quantity * item.purchasePrice).toLocaleString()}
+                ₹{(item.quantity * item.price).toLocaleString()}
               </span>
             </div>
 
@@ -345,7 +387,7 @@ export function CartSidebar() {
         <div className="flex items-center gap-2">
           <ShoppingCart className="h-5 w-5" style={{ color: theme.colors.primary }} />
           <h2 className="font-semibold" style={{ color: theme.colors.foreground }}>
-            Cart ({getTotalItems()})
+            Cart <CartCount />
           </h2>
         </div>
         <button

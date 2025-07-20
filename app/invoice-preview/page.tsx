@@ -28,7 +28,7 @@ export default function InvoicePreviewPage() {
   const [processResult, setProcessResult] = useState<{ success: boolean; errors: string[] } | null>(null);
 
   // Find customer
-  const customer = customers.find(c => c.id === Number(customerId));
+  const customer = customers.find(c => c.id === customerId);
   
   // Generate invoice data
   const invoiceData = useMemo(() => {
@@ -37,7 +37,7 @@ export default function InvoicePreviewPage() {
     const invoiceNumber = `INV-${Date.now()}`;
     const currentDate = new Date().toLocaleDateString('en-IN');
     const outItems = items.filter(item => item.type === 'out');
-    const totalAmount = outItems.reduce((sum, item) => sum + (item.quantity * item.purchasePrice), 0);
+    const totalAmount = outItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
     
     return {
       customer,
@@ -84,7 +84,7 @@ export default function InvoicePreviewPage() {
     setProcessResult(null);
 
     try {
-      const result = processCart(updateInventory);
+      const result = await processCart(updateInventory);
       setProcessResult(result);
       
       if (result.success) {
@@ -97,7 +97,7 @@ export default function InvoicePreviewPage() {
             type: 'sale',
             invoiceNumber: invoiceData.invoiceNumber,
             date: invoiceData.date,
-            customer: invoiceData.customer,
+            customerId: invoiceData.customer.id,
             items: invoiceData.items,
             totalAmount: invoiceData.totalAmount,
             totalItems: invoiceData.items.length,

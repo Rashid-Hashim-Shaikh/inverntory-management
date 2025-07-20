@@ -25,7 +25,7 @@ export function PDFPreviewModal({ isOpen, onClose, customer, items }: PDFPreview
     const invoiceNumber = `INV-${Date.now()}`;
     const currentDate = new Date().toLocaleDateString('en-IN');
     const outItems = items.filter(item => item.type === 'out');
-    const totalAmount = outItems.reduce((sum, item) => sum + (item.quantity * item.purchasePrice), 0);
+    const totalAmount = outItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
     
     return {
       customer,

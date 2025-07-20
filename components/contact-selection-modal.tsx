@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Search, Plus, User, Truck, Phone, MapPin } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { useTheme } from '@/lib/use-theme';
-import { useCustomerStore, Customer, CustomerFormData } from '@/lib/store/customers';
-import { useSupplierStore, Supplier, SupplierFormData } from '@/lib/store/suppliers';
+import { useCustomerStore, Customer } from '@/lib/store/customers';
+import { useSupplierStore, Supplier } from '@/lib/store/suppliers';
 import { AddCustomerModal } from '@/components/add-customer-modal';
 import { AddSupplierModal } from '@/components/add-supplier-modal';
 
@@ -22,17 +22,8 @@ export function ContactSelectionModal({ isOpen, onClose, type, onSelect }: Conta
   const [showAddModal, setShowAddModal] = useState(false);
   
   // Stores
-  const { customers, searchCustomers, addCustomer, initializeCustomers } = useCustomerStore();
-  const { suppliers, searchSuppliers, addSupplier, initializeSuppliers } = useSupplierStore();
-
-  // Initialize data on component mount
-  useEffect(() => {
-    if (type === 'customer') {
-      initializeCustomers();
-    } else {
-      initializeSuppliers();
-    }
-  }, [type, initializeCustomers, initializeSuppliers]);
+  const { customers, searchCustomers, addCustomer } = useCustomerStore();
+  const { suppliers, searchSuppliers, addSupplier } = useSupplierStore();
 
   const contacts = type === 'customer' ? customers : suppliers;
   const filteredContacts = searchTerm 

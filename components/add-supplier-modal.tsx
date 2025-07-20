@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { User, Phone, MapPin, FileText } from 'lucide-react';
+import { User, Phone, MapPin, Mail } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { useTheme } from '@/lib/use-theme';
 import { SupplierFormData } from '@/lib/store/suppliers';
@@ -14,19 +14,19 @@ interface AddSupplierModalProps {
 
 interface FormErrors {
   name?: string;
+  email?: string;
   mobile?: string;
   address?: string;
-  gstNumber?: string;
 }
 
 export function AddSupplierModal({ isOpen, onClose, onAddSupplier }: AddSupplierModalProps) {
   const theme = useTheme();
   
-  const [formData, setFormData] = useState<SupplierFormData & { [key: string]: string }>({
+  const [formData, setFormData] = useState<SupplierFormData>({
     name: '',
+    email: '',
     mobile: '',
     address: '',
-    gstNumber: '',
   });
   
   const [errors, setErrors] = useState<FormErrors>({});
@@ -50,6 +50,14 @@ export function AddSupplierModal({ isOpen, onClose, onAddSupplier }: AddSupplier
       newErrors.name = 'Supplier name must be at least 2 characters';
     }
 
+    // Email validation (optional but if provided, should be valid)
+    if (formData.email && formData.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email.trim())) {
+        newErrors.email = 'Invalid email format';
+      }
+    }
+
     // Mobile validation
     if (!formData.mobile.trim()) {
       newErrors.mobile = 'Mobile number is required';
@@ -57,19 +65,11 @@ export function AddSupplierModal({ isOpen, onClose, onAddSupplier }: AddSupplier
       newErrors.mobile = 'Mobile number must be 10 digits';
     }
 
-    // GST Number validation (optional but if provided, should be valid format)
-    if (formData.gstNumber && formData.gstNumber.trim()) {
-      const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-      if (!gstRegex.test(formData.gstNumber.trim().toUpperCase())) {
-        newErrors.gstNumber = 'Invalid GST number format';
-      }
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!validateForm()) {
@@ -78,21 +78,21 @@ export function AddSupplierModal({ isOpen, onClose, onAddSupplier }: AddSupplier
 
     const supplierData: SupplierFormData = {
       name: formData.name.trim(),
+      email: formData.email.trim(),
       mobile: formData.mobile.replace(/\D/g, ''), // Remove non-digits
-      address: formData.address?.trim() || undefined,
-      gstNumber: formData.gstNumber?.trim().toUpperCase() || undefined,
+      address: formData.address.trim(),
     };
 
-    onAddSupplier(supplierData);
+    await onAddSupplier(supplierData);
     handleClose();
   };
 
   const handleClose = () => {
     setFormData({
       name: '',
+      email: '',
       mobile: '',
       address: '',
-      gstNumber: '',
     });
     setErrors({});
     onClose();
@@ -125,6 +125,31 @@ export function AddSupplierModal({ isOpen, onClose, onAddSupplier }: AddSupplier
             </div>
             {errors.name && (
               <p className="text-red-500 text-sm mt-1">{errors.name}</p>
+            )}
+          </div>
+
+          {/* Email */}
+          <div>
+            <label className="block text-sm font-medium mb-2" style={{ color: theme.colors.foreground }}>
+              Email
+            </label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => handleInputChange('email', e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                style={{
+                  borderColor: errors.email ? '#ef4444' : theme.colors.border,
+                  backgroundColor: theme.colors.background,
+                  color: theme.colors.foreground,
+                }}
+                placeholder="Enter email address (optional)"
+              />
+            </div>
+            {errors.email && (
+              <p className="text-red-500 text-sm mt-1">{errors.email}</p>
             )}
           </div>
 
@@ -175,32 +200,6 @@ export function AddSupplierModal({ isOpen, onClose, onAddSupplier }: AddSupplier
             </div>
             {errors.address && (
               <p className="text-red-500 text-sm mt-1">{errors.address}</p>
-            )}
-          </div>
-
-          {/* GST Number */}
-          <div>
-            <label className="block text-sm font-medium mb-2" style={{ color: theme.colors.foreground }}>
-              GST Number
-            </label>
-            <div className="relative">
-              <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                value={formData.gstNumber}
-                onChange={(e) => handleInputChange('gstNumber', e.target.value.toUpperCase())}
-                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                style={{
-                  borderColor: errors.gstNumber ? '#ef4444' : theme.colors.border,
-                  backgroundColor: theme.colors.background,
-                  color: theme.colors.foreground,
-                }}
-                placeholder="Enter GST number (optional)"
-                maxLength={15}
-              />
-            </div>
-            {errors.gstNumber && (
-              <p className="text-red-500 text-sm mt-1">{errors.gstNumber}</p>
             )}
           </div>
 

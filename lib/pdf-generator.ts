@@ -48,11 +48,6 @@ export const generateSalesInvoicePDF = (data: InvoiceData): jsPDF => {
     rightSideY += 10;
   }
   
-  if (data.customer.gstNumber) {
-    doc.text(`GST No: ${data.customer.gstNumber}`, 120, rightSideY);
-    rightSideY += 10;
-  }
-  
   // Items Table - starts earlier due to space savings
   const tableStartY = 100;
   
@@ -61,8 +56,8 @@ export const generateSalesInvoicePDF = (data: InvoiceData): jsPDF => {
     item.product.name,
     item.quantity.toString(),
     item.product.unit,
-    `${item.purchasePrice.toLocaleString('en-IN')}`,
-    `${(item.quantity * item.purchasePrice).toLocaleString('en-IN')}`
+    `${item.price.toLocaleString('en-IN')}`,
+    `${(item.quantity * item.price).toLocaleString('en-IN')}`
   ]);
   
   autoTable(doc, {

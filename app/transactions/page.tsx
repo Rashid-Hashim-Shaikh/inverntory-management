@@ -1,18 +1,29 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Search, Filter, Eye, Download, Receipt } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Search, Eye, Download, Receipt } from 'lucide-react';
 import { useTheme } from '@/lib/use-theme';
 import { useTransactionStore, Transaction } from '@/lib/store/transactions';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 export default function TransactionsPage() {
   const theme = useTheme();
-  const { transactions, searchTransactions } = useTransactionStore();
+  const { 
+    transactions, 
+    loading, 
+    error, 
+    fetchTransactions, 
+    searchTransactions 
+  } = useTransactionStore();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending' | 'cancelled'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'sale' | 'purchase'>('all');
+
+  // Fetch transactions on component mount
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
 
   // Filter transactions based on search and filters
   const filteredTransactions = useMemo(() => {
@@ -71,6 +82,35 @@ export default function TransactionsPage() {
     return mobile;
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen p-6 flex items-center justify-center" style={{ backgroundColor: theme.colors.background }}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p style={{ color: theme.colors.mutedForeground }}>Loading transactions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen p-6 flex items-center justify-center" style={{ backgroundColor: theme.colors.background }}>
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={() => fetchTransactions()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen p-6" style={{ backgroundColor: theme.colors.background }}>
       <div className="max-w-7xl mx-auto">
@@ -115,7 +155,7 @@ export default function TransactionsPage() {
             <div>
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as any)}
+                onChange={(e) => setStatusFilter(e.target.value as 'all' | 'completed' | 'pending' | 'cancelled')}
                 className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 style={{
                   backgroundColor: theme.colors.input,
@@ -134,7 +174,7 @@ export default function TransactionsPage() {
             <div>
               <select
                 value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value as any)}
+                onChange={(e) => setTypeFilter(e.target.value as 'all' | 'sale' | 'purchase')}
                 className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 style={{
                   backgroundColor: theme.colors.input,

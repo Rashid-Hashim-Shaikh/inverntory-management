@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { 
   LucideDollarSign, 
   LucidePackage, 
@@ -18,15 +18,12 @@ export default function Home() {
   const dashboardMetrics = useMemo(() => {
     const totalProducts = products.length;
     const totalInventoryValue = products.reduce((sum, product) => sum + (product.price * product.quantity), 0);
-    const totalPurchaseValue = products.reduce((sum, product) => sum + (product.purchasePrice * product.quantity), 0);
-    const potentialProfit = totalInventoryValue - totalPurchaseValue;
     const lowStockItems = products.filter(product => product.quantity < 10).length;
     const totalQuantity = products.reduce((sum, product) => sum + product.quantity, 0);
 
     return {
       totalProducts,
       totalInventoryValue,
-      potentialProfit,
       lowStockItems,
       totalQuantity
     };
@@ -81,8 +78,8 @@ export default function Home() {
           icon={LucideDollarSign}
           description="Total value of current inventory"
           trend={{
-            value: dashboardMetrics.potentialProfit,
-            isPositive: dashboardMetrics.potentialProfit > 0
+            value: dashboardMetrics.totalInventoryValue,
+            isPositive: dashboardMetrics.totalInventoryValue > 0
           }}
         />
         

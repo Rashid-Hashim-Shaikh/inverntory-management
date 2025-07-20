@@ -20,29 +20,41 @@ export default function CustomersPage() {
   const theme = useTheme();
   
   // Zustand store
-  const { customers, addCustomer, deleteCustomer, searchCustomers, initializeCustomers } = useCustomerStore();
+  const { 
+    customers, 
+    loading, 
+    error, 
+    fetchCustomers, 
+    addCustomer, 
+    deleteCustomer, 
+    searchCustomers, 
+    clearError 
+  } = useCustomerStore();
 
-  // Initialize customers on component mount
+  // Fetch customers on component mount
   useEffect(() => {
-    initializeCustomers();
-  }, [initializeCustomers]);
+    fetchCustomers();
+  }, [fetchCustomers]);
 
   const filteredCustomers = searchTerm 
     ? searchCustomers(searchTerm)
     : customers;
 
-  const handleAddCustomer = (customerData: CustomerFormData) => {
-    addCustomer(customerData);
-  };
-
-  const handleDeleteCustomer = (customerId: number) => {
-    if (window.confirm('Are you sure you want to delete this customer?')) {
-      deleteCustomer(customerId);
+  const handleAddCustomer = async (customerData: CustomerFormData) => {
+    const success = await addCustomer(customerData);
+    if (success) {
+      setIsModalOpen(false);
     }
   };
 
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleDateString('en-IN', {
+  const handleDeleteCustomer = async (customerId: string) => {
+    if (window.confirm('Are you sure you want to delete this customer?')) {
+      await deleteCustomer(customerId);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -98,8 +110,40 @@ export default function CustomersPage() {
         </div>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p style={{ color: theme.colors.mutedForeground }}>Loading customers...</p>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div className="text-center py-12">
+          <div className="text-6xl mb-4">⚠️</div>
+          <h2 className="text-xl font-semibold mb-2" style={{ color: theme.colors.foreground }}>
+            Error Loading Customers
+          </h2>
+          <p className="text-lg mb-4" style={{ color: theme.colors.mutedForeground }}>
+            {error}
+          </p>
+          <button
+            onClick={() => { clearError(); fetchCustomers(); }}
+            className="px-4 py-2 rounded-lg font-medium transition-colors hover:opacity-90"
+            style={{
+              backgroundColor: theme.colors.primary,
+              color: theme.colors.primaryForeground,
+            }}
+          >
+            Try Again
+          </button>
+        </div>
+      )}
+
       {/* Customers Table */}
-      <div className="rounded-lg border" style={{ borderColor: theme.colors.border }}>
+      {!loading && !error && (
+        <div className="rounded-lg border" style={{ borderColor: theme.colors.border }}>
         <Table>
           <TableHeader>
             <TableRow>
@@ -121,10 +165,10 @@ export default function CustomersPage() {
                   Address
                 </div>
               </TableHead>
-              <TableHead className="w-[150px]">
+              <TableHead className="w-[200px]">
                 <div className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
-                  GST Number
+                  Email
                 </div>
               </TableHead>
               <TableHead className="w-[120px]">Added On</TableHead>
@@ -203,13 +247,13 @@ export default function CustomersPage() {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <FileText className="h-3 w-3 text-gray-400" />
-                      <span className="text-sm font-mono">
-                        {customer.gstNumber || 'N/A'}
+                      <span className="text-sm">
+                        {customer.email || 'N/A'}
                       </span>
                     </div>
                   </TableCell>
                   <TableCell className="text-sm" style={{ color: theme.colors.mutedForeground }}>
-                    {formatDate(customer.createdAt)}
+                    {formatDate(customer.created_at)}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-center gap-2">
@@ -228,6 +272,7 @@ export default function CustomersPage() {
           </TableBody>
         </Table>
       </div>
+      )}
 
       {/* Add Customer Modal */}
       <AddCustomerModal

@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 import { CartItem } from './cart';
 import { Customer } from './customers';
 import { Supplier } from './suppliers';
@@ -16,78 +15,248 @@ export interface Transaction {
   totalItems: number;
   totalQuantity: number;
   status: 'completed' | 'pending' | 'cancelled';
-  createdAt: number;
+  createdAt: string;
+}
+
+export interface TransactionFormData {
+  type: 'sale' | 'purchase';
+  invoiceNumber: string;
+  date: string;
+  customerId?: string;
+  supplierId?: string;
+  items: CartItem[];
+  totalAmount: number;
+  totalItems: number;
+  totalQuantity: number;
+  status?: 'completed' | 'pending' | 'cancelled';
 }
 
 interface TransactionStore {
   transactions: Transaction[];
-  addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => void;
-  updateTransactionStatus: (id: string, status: Transaction['status']) => void;
+  loading: boolean;
+  error: string | null;
+  
+  // API Actions
+  fetchTransactions: (search?: string, status?: string, type?: string) => Promise<void>;
+  addTransaction: (transactionData: TransactionFormData) => Promise<boolean>;
+  updateTransactionStatus: (id: string, status: Transaction['status']) => Promise<boolean>;
+  
+  // Local Actions
   getTransactionById: (id: string) => Transaction | undefined;
   getTransactionsByType: (type: 'sale' | 'purchase') => Transaction[];
   getTransactionsByStatus: (status: Transaction['status']) => Transaction[];
   searchTransactions: (searchTerm: string) => Transaction[];
-  clearTransactions: () => void;
+  
+  // State Management
+  setLoading: (loading: boolean) => void;
+  setError: (error: string | null) => void;
+  clearError: () => void;
 }
 
-export const useTransactionStore = create<TransactionStore>()(
-  persist(
-    (set, get) => ({
-      transactions: [],
+export const useTransactionStore = create<TransactionStore>((set, get) => ({
+  transactions: [],
+  loading: false,
+  error: null,
+  
+  // API Actions
+  fetchTransactions: async (search?: string, status?: string, type?: string) => {
+    set({ loading: true, error: null });
+    
+    try {
+      const params = new URLSearchParams();
+      if (search) params.append('search', search);
+      if (status && status !== 'all') params.append('status', status);
+      if (type && type !== 'all') params.append('type', type);
       
-      addTransaction: (transactionData) => {
-        const newTransaction: Transaction = {
-          ...transactionData,
-          id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          createdAt: Date.now(),
-        };
-        
-        set((state) => ({
-          transactions: [newTransaction, ...state.transactions], // Add to beginning for latest first
-        }));
-      },
+      const response = await fetch(`/api/transactions?${params.toString()}`);
+      const data = await response.json();
       
-      updateTransactionStatus: (id: string, status: Transaction['status']) => {
-        set((state) => ({
-          transactions: state.transactions.map((transaction) =>
-            transaction.id === id ? { ...transaction, status } : transaction
-          ),
-        }));
-      },
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch transactions');
+      }
       
-      getTransactionById: (id: string) => {
-        return get().transactions.find((transaction) => transaction.id === id);
-      },
+      // Transform API response to match frontend format
+      const transformedTransactions = data.transactions.map((transaction: {
+        id: string;
+        type: 'sale' | 'purchase';
+        invoice_number: string;
+        date: string;
+        customer?: Customer;
+        supplier?: Supplier;
+        items: CartItem[];
+        total_amount: number;
+        total_items: number;
+        total_quantity: number;
+        status: 'completed' | 'pending' | 'cancelled';
+        created_at: string;
+      }) => ({
+        id: transaction.id,
+        type: transaction.type,
+        invoiceNumber: transaction.invoice_number,
+        date: transaction.date,
+        customer: transaction.customer,
+        supplier: transaction.supplier,
+        items: transaction.items,
+        totalAmount: transaction.total_amount,
+        totalItems: transaction.total_items,
+        totalQuantity: transaction.total_quantity,
+        status: transaction.status,
+        createdAt: transaction.created_at,
+      }));
       
-      getTransactionsByType: (type: 'sale' | 'purchase') => {
-        return get().transactions.filter((transaction) => transaction.type === type);
-      },
-      
-      getTransactionsByStatus: (status: Transaction['status']) => {
-        return get().transactions.filter((transaction) => transaction.status === status);
-      },
-      
-      searchTransactions: (searchTerm: string) => {
-        const { transactions } = get();
-        if (!searchTerm.trim()) return transactions;
-        
-        return transactions.filter((transaction) =>
-          transaction.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          transaction.customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          transaction.supplier?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          transaction.customer?.mobile.includes(searchTerm) ||
-          transaction.supplier?.mobile.includes(searchTerm)
-        );
-      },
-      
-      clearTransactions: () => {
-        set({ transactions: [] });
-      },
-    }),
-    {
-      name: 'inventory-transactions-storage',
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ transactions: state.transactions }),
+      set({ transactions: transformedTransactions, loading: false });
+    } catch (error) {
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to fetch transactions',
+        loading: false 
+      });
     }
-  )
-); 
+  },
+  
+  addTransaction: async (transactionData: TransactionFormData) => {
+    set({ loading: true, error: null });
+    
+    try {
+      // Transform data to match API format
+      const apiData = {
+        type: transactionData.type,
+        invoice_number: transactionData.invoiceNumber,
+        date: transactionData.date,
+        customer_id: transactionData.customerId,
+        supplier_id: transactionData.supplierId,
+        items: transactionData.items,
+        total_amount: transactionData.totalAmount,
+        total_items: transactionData.totalItems,
+        total_quantity: transactionData.totalQuantity,
+        status: transactionData.status || 'completed',
+      };
+
+      const response = await fetch('/api/transactions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(apiData),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create transaction');
+      }
+      
+      // Transform the response to match frontend format
+      const transformedTransaction = {
+        id: data.transaction.id,
+        type: data.transaction.type,
+        invoiceNumber: data.transaction.invoice_number,
+        date: data.transaction.date,
+        customer: data.transaction.customer,
+        supplier: data.transaction.supplier,
+        items: data.transaction.items,
+        totalAmount: data.transaction.total_amount,
+        totalItems: data.transaction.total_items,
+        totalQuantity: data.transaction.total_quantity,
+        status: data.transaction.status,
+        createdAt: data.transaction.created_at,
+      };
+
+      // Add new transaction to the list
+      set((state) => ({
+        transactions: [transformedTransaction, ...state.transactions],
+        loading: false,
+      }));
+      
+      return true;
+    } catch (error) {
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to create transaction',
+        loading: false 
+      });
+      return false;
+    }
+  },
+  
+  updateTransactionStatus: async (id: string, status: Transaction['status']) => {
+    set({ loading: true, error: null });
+    
+    try {
+      const response = await fetch(`/api/transactions/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update transaction');
+      }
+      
+      // Transform the response to match frontend format
+      const transformedTransaction = {
+        id: data.transaction.id,
+        type: data.transaction.type,
+        invoiceNumber: data.transaction.invoice_number,
+        date: data.transaction.date,
+        customer: data.transaction.customer,
+        supplier: data.transaction.supplier,
+        items: data.transaction.items,
+        totalAmount: data.transaction.total_amount,
+        totalItems: data.transaction.total_items,
+        totalQuantity: data.transaction.total_quantity,
+        status: data.transaction.status,
+        createdAt: data.transaction.created_at,
+      };
+
+      // Update transaction in the list
+      set((state) => ({
+        transactions: state.transactions.map((transaction) =>
+          transaction.id === id ? transformedTransaction : transaction
+        ),
+        loading: false,
+      }));
+      
+      return true;
+    } catch (error) {
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to update transaction',
+        loading: false 
+      });
+      return false;
+    }
+  },
+  
+  // Local Actions
+  getTransactionById: (id: string) => {
+    return get().transactions.find((transaction) => transaction.id === id);
+  },
+  
+  getTransactionsByType: (type: 'sale' | 'purchase') => {
+    return get().transactions.filter((transaction) => transaction.type === type);
+  },
+  
+  getTransactionsByStatus: (status: Transaction['status']) => {
+    return get().transactions.filter((transaction) => transaction.status === status);
+  },
+  
+  searchTransactions: (searchTerm: string) => {
+    const { transactions } = get();
+    if (!searchTerm.trim()) return transactions;
+    
+    return transactions.filter((transaction) =>
+      transaction.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      transaction.customer?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      transaction.supplier?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      transaction.customer?.mobile.includes(searchTerm) ||
+      transaction.supplier?.mobile.includes(searchTerm)
+    );
+  },
+  
+  // State Management
+  setLoading: (loading: boolean) => set({ loading }),
+  setError: (error: string | null) => set({ error }),
+  clearError: () => set({ error: null }),
+})); 

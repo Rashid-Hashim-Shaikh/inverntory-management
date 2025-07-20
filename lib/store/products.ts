@@ -208,9 +208,16 @@ export const useProductStore = create<ProductStore>((set, get) => ({
       ),
     }));
 
-    // Then update on server
+    // Then update on server with all required fields
     try {
-      const success = await get().updateProduct(productId, { quantity: newQuantity });
+      const success = await get().updateProduct(productId, { 
+        name: product.name,
+        price: product.price,
+        quantity: newQuantity,
+        description: product.description,
+        unit: product.unit,
+        category: product.category
+      });
       if (!success) {
         // Revert local change if server update failed
         set((state) => ({
@@ -221,15 +228,15 @@ export const useProductStore = create<ProductStore>((set, get) => ({
         return false;
       }
       return true;
-         } catch {
-       // Revert local change if server update failed
-       set((state) => ({
-         products: state.products.map((p) =>
-           p.id === productId ? { ...p, quantity: product.quantity } : p
-         ),
-       }));
-       return false;
-     }
+    } catch {
+      // Revert local change if server update failed
+      set((state) => ({
+        products: state.products.map((p) =>
+          p.id === productId ? { ...p, quantity: product.quantity } : p
+        ),
+      }));
+      return false;
+    }
   },
   
   // State Management

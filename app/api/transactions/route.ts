@@ -96,12 +96,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Convert date from Indian format (DD/MM/YYYY) to ISO format (YYYY-MM-DD)
+    const convertDate = (dateString: string) => {
+      const parts = dateString.split('/');
+      if (parts.length === 3) {
+        const day = parts[0].padStart(2, '0');
+        const month = parts[1].padStart(2, '0');
+        const year = parts[2];
+        return `${year}-${month}-${day}`;
+      }
+      return dateString; // Return as-is if not in expected format
+    };
+
     const { data, error } = await supabase
       .from(TABLES.TRANSACTIONS)
       .insert({
         type,
         invoice_number,
-        date,
+        date: convertDate(date),
         customer_id: customer_id || null,
         supplier_id: supplier_id || null,
         items,

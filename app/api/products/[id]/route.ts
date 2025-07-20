@@ -5,13 +5,14 @@ import { TABLES } from '@/lib/supabase';
 // GET /api/products/[id] - Get single product
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const { data, error } = await supabase
       .from(TABLES.PRODUCTS)
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (error) {
@@ -35,14 +36,15 @@ export async function GET(
 // PUT /api/products/[id] - Update product
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const body = await request.json();
     const { name, description, price, quantity, unit, category } = body;
 
     // Validation
-    if (!name || !price || quantity === undefined) {
+    if (!name || price === undefined || price === null || quantity === undefined || quantity === null) {
       return NextResponse.json(
         { error: 'Name, price, and quantity are required' },
         { status: 400 }
@@ -59,7 +61,7 @@ export async function PUT(
         unit: unit || 'pcs',
         category: category || 'General',
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single();
 
@@ -84,13 +86,14 @@ export async function PUT(
 // DELETE /api/products/[id] - Delete product
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const { error } = await supabase
       .from(TABLES.PRODUCTS)
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (error) {
       console.error('Error deleting product:', error);

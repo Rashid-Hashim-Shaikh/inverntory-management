@@ -8,6 +8,7 @@ import { AddProductModal } from '@/components/add-product-modal';
 import { CartSidebar } from '@/components/cart-sidebar';
 import { useProductStore, ProductFormData } from '@/lib/store/products';
 import { useCartStore } from '@/lib/store/cart';
+import { CartBadge } from '@/components/cart-badge';
 
 export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -24,7 +25,7 @@ export default function ProductsPage() {
     searchProducts, 
     clearError 
   } = useProductStore();
-  const { addToCart, toggleCart, getTotalItems } = useCartStore();
+  const { addToCart, toggleCart } = useCartStore();
 
   // Fetch products on component mount
   useEffect(() => {
@@ -83,17 +84,7 @@ export default function ProductsPage() {
             >
               <ShoppingCart className="h-4 w-4" />
               Cart
-              {getTotalItems() > 0 && (
-                <span
-                  className="absolute -top-2 -right-2 h-5 w-5 rounded-full text-xs flex items-center justify-center font-bold"
-                  style={{
-                    backgroundColor: theme.colors.destructive,
-                    color: theme.colors.destructiveForeground,
-                  }}
-                >
-                  {getTotalItems()}
-                </span>
-              )}
+              <CartBadge />
             </button>
 
             {/* Add Product Button */}

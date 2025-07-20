@@ -5,17 +5,19 @@ import { TABLES } from '@/lib/supabase';
 // GET /api/transactions/[id] - Get single transaction
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+  
   try {
     const { data, error } = await supabase
       .from(TABLES.TRANSACTIONS)
       .select(`
         *,
-        customer:customers(id, name, mobile, email, address),
-        supplier:suppliers(id, name, mobile, email, address)
+        customer:customers(id, name, mobile),
+        supplier:suppliers(id, name, mobile)
       `)
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (error) {
@@ -39,61 +41,26 @@ export async function GET(
 // PUT /api/transactions/[id] - Update transaction
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+  
   try {
     const body = await request.json();
-    const {
-      type,
-      invoice_number,
-      date,
-      customer_id,
-      supplier_id,
-      items,
-      total_amount,
-      total_items,
-      total_quantity,
-      status
-    } = body;
+    const { status } = body;
 
     // Validation
-    if (!type || !invoice_number || !date || !items || !total_amount) {
+    if (!status || !['completed', 'pending', 'cancelled'].includes(status)) {
       return NextResponse.json(
-        { error: 'Type, invoice number, date, items, and total amount are required' },
-        { status: 400 }
-      );
-    }
-
-    // Check if invoice number already exists for other transactions
-    const { data: existingTransaction } = await supabase
-      .from(TABLES.TRANSACTIONS)
-      .select('id')
-      .eq('invoice_number', invoice_number)
-      .neq('id', params.id)
-      .single();
-
-    if (existingTransaction) {
-      return NextResponse.json(
-        { error: 'Transaction with this invoice number already exists' },
+        { error: 'Valid status is required' },
         { status: 400 }
       );
     }
 
     const { data, error } = await supabase
       .from(TABLES.TRANSACTIONS)
-      .update({
-        type,
-        invoice_number,
-        date,
-        customer_id: customer_id || null,
-        supplier_id: supplier_id || null,
-        items,
-        total_amount: parseFloat(total_amount),
-        total_items: parseInt(total_items) || items.length,
-        total_quantity: parseInt(total_quantity) || items.reduce((sum: number, item: { quantity: number }) => sum + item.quantity, 0),
-        status: status || 'completed',
-      })
-      .eq('id', params.id)
+      .update({ status })
+      .eq('id', id)
       .select(`
         *,
         customer:customers(id, name, mobile),
@@ -122,13 +89,15 @@ export async function PUT(
 // DELETE /api/transactions/[id] - Delete transaction
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
+  
   try {
     const { error } = await supabase
       .from(TABLES.TRANSACTIONS)
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (error) {
       console.error('Error deleting transaction:', error);
