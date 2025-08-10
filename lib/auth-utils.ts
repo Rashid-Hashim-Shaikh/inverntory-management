@@ -1,18 +1,22 @@
-// JWT Token Management Utilities
-import { supabase } from './supabase';
+// JWT Token Management Utilities (Firebase)
+import { firebaseAuth } from './firebase';
+import { getIdToken, signOut as firebaseSignOut } from 'firebase/auth';
 
 /**
  * Get the current JWT token from localStorage
  */
-export function getCurrentToken(): string | null {
+export function getCurrentToken(): string | null { return null; }
+
+/**
+ * Get the current JWT token from Firebase Auth
+ */
+export async function getFirebaseIdToken(): Promise<string | null> {
   try {
-    const tokenData = localStorage.getItem('supabase.auth.token');
-    if (!tokenData) return null;
-    
-    const parsed = JSON.parse(tokenData);
-    return parsed.access_token || null;
+    const user = firebaseAuth.currentUser;
+    if (!user) return null;
+    return await getIdToken(user, false);
   } catch (error) {
-    console.error('Error getting token:', error);
+    console.error('Error getting token from Firebase:', error);
     return null;
   }
 }
@@ -21,7 +25,7 @@ export function getCurrentToken(): string | null {
  * Check if user is authenticated
  */
 export function isAuthenticated(): boolean {
-  return getCurrentToken() !== null;
+  return !!firebaseAuth.currentUser;
 }
 
 /**
@@ -29,10 +33,7 @@ export function isAuthenticated(): boolean {
  */
 export function getCurrentUser() {
   try {
-    const userData = localStorage.getItem('supabase.auth.user');
-    if (!userData) return null;
-    
-    return JSON.parse(userData);
+    return firebaseAuth.currentUser;
   } catch (error) {
     console.error('Error getting user:', error);
     return null;
@@ -46,7 +47,8 @@ export async function authenticatedFetch(
   url: string, 
   options: RequestInit = {}
 ): Promise<Response> {
-  const token = getCurrentToken();
+  // Get Firebase ID token
+  const token = await getFirebaseIdToken();
   
   if (!token) {
     throw new Error('No authentication token found. Please log in.');
@@ -69,12 +71,9 @@ export async function authenticatedFetch(
  */
 export async function refreshToken(): Promise<string | null> {
   try {
-    const { data, error } = await supabase.auth.refreshSession();
-    if (error) {
-      console.error('Error refreshing token:', error);
-      return null;
-    }
-    return data.session?.access_token || null;
+    const user = firebaseAuth.currentUser;
+    if (!user) return null;
+    return await getIdToken(user, true);
   } catch (error) {
     console.error('Error refreshing token:', error);
     return null;
@@ -86,9 +85,7 @@ export async function refreshToken(): Promise<string | null> {
  */
 export async function logout(): Promise<void> {
   try {
-    await supabase.auth.signOut();
-    localStorage.removeItem('supabase.auth.token');
-    localStorage.removeItem('supabase.auth.user');
+    await firebaseSignOut(firebaseAuth);
   } catch (error) {
     console.error('Error during logout:', error);
   }
@@ -98,37 +95,14 @@ export async function logout(): Promise<void> {
  * Check if token is expired
  */
 export function isTokenExpired(): boolean {
-  try {
-    const tokenData = localStorage.getItem('supabase.auth.token');
-    if (!tokenData) return true;
-    
-    const parsed = JSON.parse(tokenData);
-    if (!parsed.expires_at) return true;
-    
-    const expiryTime = parsed.expires_at * 1000; // Convert to milliseconds
-    const currentTime = Date.now();
-    
-    return currentTime >= expiryTime;
-  } catch (error) {
-    console.error('Error checking token expiry:', error);
-    return true;
-  }
+  return false;
 }
 
 /**
  * Get token with automatic refresh if expired
  */
 export async function getValidToken(): Promise<string | null> {
-  const token = getCurrentToken();
-  
-  if (!token) {
-    return null;
-  }
-  
-  if (isTokenExpired()) {
-    console.log('Token expired, refreshing...');
-    return await refreshToken();
-  }
-  
-  return token;
+  const token = await getFirebaseIdToken();
+  if (token) return token;
+  return await refreshToken();
 } 

@@ -1,27 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { TABLES } from '@/lib/supabase';
+import { TABLES } from '@/lib/firebase';
+import { adminDb, verifyFirebaseToken } from '@/lib/firebase-server';
+import type { DecodedIdToken } from 'firebase-admin/auth';
 
 // Helper function to get authenticated user from JWT
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user) {
-      return null;
-    }
-    return user;
-  } catch (error) {
-    console.error('Error verifying JWT:', error);
-    return null;
-  }
+async function getAuthenticatedUser(request: NextRequest): Promise<DecodedIdToken | null> {
+  return await verifyFirebaseToken(request.headers.get('authorization') || undefined);
 }
 
 // POST /api/inventory/update - Update inventory based on transaction
@@ -35,10 +19,6 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
-
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || '';
-    const supabaseClient = createServerSupabaseClient(token);
 
     const body = await request.json();
     const { items, type } = body;
@@ -57,20 +37,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const updates = [];
-    const errors = [];
+    type InventoryUpdate = { productId: string; name: string; oldQuantity: number; newQuantity: number; change: number };
+    const updates: InventoryUpdate[] = [];
+    const errors: string[] = [];
 
     // Process each item
     for (const item of items) {
       try {
         // Get current product
-        const { data: product, error: fetchError } = await supabaseClient
-          .from(TABLES.PRODUCTS)
-          .select('*')
-          .eq('id', item.productId)
-          .single();
-
-        if (fetchError || !product) {
+        const doc = await adminDb.collection(TABLES.PRODUCTS).doc(item.productId).get();
+        const product = doc.data() as { quantity: number } | undefined;
+        if (!doc.exists || !product) {
           errors.push(`Product ${item.name} not found`);
           continue;
         }
@@ -90,14 +67,11 @@ export async function POST(request: NextRequest) {
         }
 
         // Update product quantity
-        const { error: updateError } = await supabaseClient
-          .from(TABLES.PRODUCTS)
-          .update({ quantity: newQuantity })
-          .eq('id', item.productId);
-
-        if (updateError) {
-          errors.push(`Failed to update ${item.name}: ${updateError.message}`);
-        } else {
+        try {
+          await adminDb.collection(TABLES.PRODUCTS).doc(item.productId).update({
+            quantity: newQuantity,
+            updated_at: new Date().toISOString(),
+          });
           updates.push({
             productId: item.productId,
             name: item.name,
@@ -105,6 +79,9 @@ export async function POST(request: NextRequest) {
             newQuantity,
             change: type === 'sale' ? -item.quantity : item.quantity,
           });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          errors.push(`Failed to update ${item.name}: ${msg}`);
         }
       } catch (error) {
         errors.push(`Error processing ${item.name}: ${error}`);

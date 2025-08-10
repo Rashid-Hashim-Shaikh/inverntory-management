@@ -1,27 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { TABLES } from '@/lib/supabase';
+import { TABLES } from '@/lib/firebase';
+import { adminDb, verifyFirebaseToken } from '@/lib/firebase-server';
+import { Query } from 'firebase-admin/firestore';
+import type { DecodedIdToken } from 'firebase-admin/auth';
 
 // Helper function to get authenticated user from JWT
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user) {
-      return null;
-    }
-    return user;
-  } catch (error) {
-    console.error('Error verifying JWT:', error);
-    return null;
-  }
+async function getAuthenticatedUser(request: NextRequest): Promise<DecodedIdToken | null> {
+  return await verifyFirebaseToken(request.headers.get('authorization') || undefined);
 }
 
 // GET /api/suppliers - Get all suppliers
@@ -36,34 +21,26 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || '';
-    const supabaseClient = createServerSupabaseClient(token);
-
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
-
-    let query = supabaseClient
-      .from(TABLES.SUPPLIERS)
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    // Apply search filter
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,mobile.ilike.%${search}%,email.ilike.%${search}%`);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
+    try {
+      const q: Query = adminDb.collection(TABLES.SUPPLIERS).orderBy('created_at', 'desc');
+      const snapshot = await q.get();
+      type Supplier = { id: string; name?: string; email?: string; mobile?: string } & Record<string, unknown>;
+      let suppliers: Supplier[] = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Supplier));
+      if (search) {
+        const s = search.toLowerCase();
+        suppliers = suppliers.filter((c) =>
+          String(c.name || '').toLowerCase().includes(s) ||
+          String(c.email || '').toLowerCase().includes(s) ||
+          String(c.mobile || '').includes(search)
+        );
+      }
+      return NextResponse.json({ suppliers });
+    } catch (error) {
       console.error('Error fetching suppliers:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch suppliers' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to fetch suppliers' }, { status: 500 });
     }
-
-    return NextResponse.json({ suppliers: data });
   } catch (error) {
     console.error('Error in suppliers GET:', error);
     return NextResponse.json(
@@ -85,10 +62,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || '';
-    const supabaseClient = createServerSupabaseClient(token);
-
     const body = await request.json();
     const { name, email, mobile, address } = body;
 
@@ -101,42 +74,32 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if mobile already exists
-    const { data: existingSupplier } = await supabaseClient
-      .from(TABLES.SUPPLIERS)
-      .select('id')
-      .eq('mobile', mobile)
-      .single();
-
-    if (existingSupplier) {
+    const existing = await adminDb.collection(TABLES.SUPPLIERS).where('mobile', '==', mobile).limit(1).get();
+    if (!existing.empty) {
       return NextResponse.json(
         { error: 'Supplier with this mobile number already exists' },
         { status: 400 }
       );
     }
 
-    const supplierData = {
+    const supplierData: Record<string, unknown> = {
       name,
       email: email || '',
       mobile,
       address: address || '',
-      // user_id will be auto-assigned by the database trigger
+      user_id: (user as any).uid,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
-
-    const { data, error } = await supabaseClient
-      .from(TABLES.SUPPLIERS)
-      .insert(supplierData)
-      .select()
-      .single();
-
-    if (error) {
+    try {
+      const ref = await adminDb.collection(TABLES.SUPPLIERS).add(supplierData);
+      const created = await ref.get();
+      const createdData = created.data() as { [key: string]: unknown } | undefined;
+      return NextResponse.json({ supplier: { id: created.id, ...(createdData || {}) } }, { status: 201 });
+    } catch (error) {
       console.error('Error creating supplier:', error);
-      return NextResponse.json(
-        { error: 'Failed to create supplier' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to create supplier' }, { status: 500 });
     }
-
-    return NextResponse.json({ supplier: data }, { status: 201 });
   } catch (error) {
     console.error('Error in suppliers POST:', error);
     return NextResponse.json(

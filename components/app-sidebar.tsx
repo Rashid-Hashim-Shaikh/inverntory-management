@@ -10,7 +10,9 @@ import {
   LucidePackage,
   LucideLayoutDashboard,
   LucideTruck,
-  LucideReceipt
+  LucideReceipt,
+  LucideShoppingCart,
+  LucideArrowUpDown
 } from "lucide-react";
 import { useSidebar } from "./ui/sidebar";
 import { cn } from "@/lib/utils";
@@ -19,6 +21,8 @@ import { UserProfile } from "./user-profile";
 const navItems = [
   { label: "Dashboard", icon: LucideLayoutDashboard, href: "/" },
   { label: "Products", icon: LucidePackage, href: "/products" },
+  { label: "Sales", icon: LucideShoppingCart, href: "/sales" },
+  { label: "Purchases", icon: LucideArrowUpDown, href: "/purchases" },
   { label: "Transactions", icon: LucideReceipt, href: "/transactions" },
   { label: "Customers", icon: LucideUsers, href: "/customers" },
   { label: "Suppliers", icon: LucideTruck, href: "/suppliers" },

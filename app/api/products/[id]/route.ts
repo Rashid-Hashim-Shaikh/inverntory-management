@@ -1,27 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { TABLES } from '@/lib/supabase';
+import { TABLES } from '@/lib/firebase';
+import { adminDb, verifyFirebaseToken } from '@/lib/firebase-server';
+import type { DecodedIdToken } from 'firebase-admin/auth';
 
 // Helper function to get authenticated user from JWT
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user) {
-      return null;
-    }
-    return user;
-  } catch (error) {
-    console.error('Error verifying JWT:', error);
-    return null;
-  }
+async function getAuthenticatedUser(request: NextRequest): Promise<DecodedIdToken | null> {
+  const decoded = await verifyFirebaseToken(request.headers.get('authorization') || undefined);
+  return decoded;
 }
 
 // GET /api/products/[id] - Get single product
@@ -40,25 +25,22 @@ export async function GET(
       );
     }
 
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || '';
-    const supabaseClient = createServerSupabaseClient(token);
-
-    const { data, error } = await supabaseClient
-      .from(TABLES.PRODUCTS)
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error) {
+    try {
+      const doc = await adminDb.collection(TABLES.PRODUCTS).doc(id).get();
+      if (!doc.exists) {
+        return NextResponse.json(
+          { error: 'Product not found' },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({ product: { id: doc.id, ...doc.data() } });
+    } catch (error) {
       console.error('Error fetching product:', error);
       return NextResponse.json(
         { error: 'Product not found' },
         { status: 404 }
       );
     }
-
-    return NextResponse.json({ product: data });
   } catch (error) {
     console.error('Error in product GET:', error);
     return NextResponse.json(
@@ -84,26 +66,17 @@ export async function PUT(
       );
     }
 
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || '';
-    const supabaseClient = createServerSupabaseClient(token);
-
     const body = await request.json();
     const { name, description, price, quantity, unit, category } = body;
 
-    // Get existing product data for partial updates
-    const { data: existingProduct, error: fetchError } = await supabaseClient
-      .from(TABLES.PRODUCTS)
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (fetchError || !existingProduct) {
+    const existingDoc = await adminDb.collection(TABLES.PRODUCTS).doc(id).get();
+    if (!existingDoc.exists) {
       return NextResponse.json(
         { error: 'Product not found' },
         { status: 404 }
       );
     }
+    const existingProduct = existingDoc.data() as any;
 
     // Merge with existing data for partial updates
     const updateData = {
@@ -123,22 +96,17 @@ export async function PUT(
       );
     }
 
-    const { data, error } = await supabaseClient
-      .from(TABLES.PRODUCTS)
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
+    try {
+      await adminDb.collection(TABLES.PRODUCTS).doc(id).update({
+        ...updateData,
+        updated_at: new Date().toISOString(),
+      });
+      const updated = await adminDb.collection(TABLES.PRODUCTS).doc(id).get();
+      return NextResponse.json({ product: { id: updated.id, ...updated.data() } });
+    } catch (error) {
       console.error('Error updating product:', error);
-      return NextResponse.json(
-        { error: 'Failed to update product' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to update product' }, { status: 500 });
     }
-
-    return NextResponse.json({ product: data });
   } catch (error) {
     console.error('Error in product PUT:', error);
     return NextResponse.json(
@@ -164,24 +132,13 @@ export async function DELETE(
       );
     }
 
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || '';
-    const supabaseClient = createServerSupabaseClient(token);
-
-    const { error } = await supabaseClient
-      .from(TABLES.PRODUCTS)
-      .delete()
-      .eq('id', id);
-
-    if (error) {
+    try {
+      await adminDb.collection(TABLES.PRODUCTS).doc(id).delete();
+      return NextResponse.json({ message: 'Product deleted successfully' });
+    } catch (error) {
       console.error('Error deleting product:', error);
-      return NextResponse.json(
-        { error: 'Failed to delete product' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 });
     }
-
-    return NextResponse.json({ message: 'Product deleted successfully' });
   } catch (error) {
     console.error('Error in product DELETE:', error);
     return NextResponse.json(

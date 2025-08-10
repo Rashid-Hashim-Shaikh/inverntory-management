@@ -28,7 +28,7 @@ interface ProductStore {
   error: string | null;
   
   // API Actions
-  fetchProducts: (search?: string, category?: string) => Promise<void>;
+  fetchProducts: () => Promise<void>;
   addProduct: (productData: ProductFormData) => Promise<boolean>;
   updateProduct: (id: string, productData: Partial<ProductFormData>) => Promise<boolean>;
   deleteProduct: (id: string) => Promise<boolean>;
@@ -36,6 +36,7 @@ interface ProductStore {
   // Local Actions
   getProductById: (id: string) => Product | undefined;
   searchProducts: (searchTerm: string) => Product[];
+  filterProductsByCategory: (category: string) => Product[];
   updateInventory: (productId: string, quantityChange: number) => Promise<boolean>;
   
   // State Management
@@ -50,18 +51,15 @@ export const useProductStore = create<ProductStore>((set, get) => ({
   error: null,
   
   // API Actions
-  fetchProducts: async (search?: string, category?: string) => {
+  fetchProducts: async () => {
     set({ loading: true, error: null });
     
     try {
-      const params = new URLSearchParams();
-      if (search) params.append('search', search);
-      if (category && category !== 'all') params.append('category', category);
-      
-      const response = await authenticatedFetch(`/api/products?${params.toString()}`);
+      const response = await authenticatedFetch('/api/products');
       const data = await response.json();
       
       if (!response.ok) {
+        console.log('Failed to fetch products:', data);
         throw new Error(data.error || 'Failed to fetch products');
       }
       
@@ -180,6 +178,12 @@ export const useProductStore = create<ProductStore>((set, get) => ({
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.description.toLowerCase().includes(searchTerm.toLowerCase())
     );
+  },
+
+  filterProductsByCategory: (category: string) => {
+    const { products } = get();
+    if (category === 'all') return products;
+    return products.filter(product => product.category === category);
   },
   
   updateInventory: async (productId: string, quantityChange: number) => {

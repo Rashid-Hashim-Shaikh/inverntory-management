@@ -1,27 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { TABLES } from '@/lib/supabase';
+import { TABLES } from '@/lib/firebase';
+import { adminDb, verifyFirebaseToken } from '@/lib/firebase-server';
 
 // Helper function to get authenticated user from JWT
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user) {
-      return null;
-    }
-    return user;
-  } catch (error) {
-    console.error('Error verifying JWT:', error);
-    return null;
-  }
+import type { DecodedIdToken } from 'firebase-admin/auth';
+async function getAuthenticatedUser(request: NextRequest): Promise<DecodedIdToken | null> {
+  return await verifyFirebaseToken(request.headers.get('authorization') || undefined);
 }
 
 // GET /api/dashboard - Get dashboard analytics
@@ -36,10 +20,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || '';
-    const supabaseClient = createServerSupabaseClient(token);
-
+    // Counts
     const { searchParams } = new URL(request.url);
     const period = searchParams.get('period') || '30'; // days
 
@@ -48,55 +29,41 @@ export async function GET(request: NextRequest) {
     const periodStart = new Date();
     periodStart.setDate(now.getDate() - parseInt(period));
 
-    // Get total products count
-    const { count: totalProducts } = await supabaseClient
-      .from(TABLES.PRODUCTS)
-      .select('*', { count: 'exact', head: true });
+    const totalProducts = (await adminDb.collection(TABLES.PRODUCTS).count().get()).data().count || 0;
+    const lowStockSnap = await adminDb.collection(TABLES.PRODUCTS).where('quantity', '<', 10).orderBy('quantity', 'asc').get();
+    const lowStockProducts = lowStockSnap.docs.map((d): Record<string, unknown> => ({ id: d.id, ...d.data() }));
 
-    // Get low stock products (quantity < 10)
-    const { data: lowStockProducts } = await supabaseClient
-      .from(TABLES.PRODUCTS)
-      .select('*')
-      .lt('quantity', 10)
-      .order('quantity', { ascending: true });
+    const totalCustomers = (await adminDb.collection(TABLES.CUSTOMERS).count().get()).data().count || 0;
+    const totalSuppliers = (await adminDb.collection(TABLES.SUPPLIERS).count().get()).data().count || 0;
 
-    // Get total customers count
-    const { count: totalCustomers } = await supabaseClient
-      .from(TABLES.CUSTOMERS)
-      .select('*', { count: 'exact', head: true });
-
-    // Get total suppliers count
-    const { count: totalSuppliers } = await supabaseClient
-      .from(TABLES.SUPPLIERS)
-      .select('*', { count: 'exact', head: true });
-
-    // Get transactions for the period
-    const { data: transactions } = await supabaseClient
-      .from(TABLES.TRANSACTIONS)
-      .select('*')
-      .gte('date', periodStart.toISOString().split('T')[0])
-      .lte('date', now.toISOString().split('T')[0])
-      .order('date', { ascending: true });
+    const txSnap = await adminDb
+      .collection(TABLES.TRANSACTIONS)
+      .where('date', '>=', periodStart.toISOString().split('T')[0])
+      .where('date', '<=', now.toISOString().split('T')[0])
+      .orderBy('date', 'asc')
+      .get();
+    type TxDoc = { type?: string; date?: string; total_amount?: number } & Record<string, unknown>;
+    const transactions: TxDoc[] = txSnap.docs.map((d) => d.data() as TxDoc);
 
     // Calculate analytics
     const totalSales = transactions
-      ?.filter(t => t.type === 'sale')
-      .reduce((sum, t) => sum + parseFloat(t.total_amount), 0) || 0;
+      ?.filter((t) => t.type === 'sale')
+      .reduce((sum: number, t) => sum + parseFloat(String(t.total_amount)), 0) || 0;
 
     const totalPurchases = transactions
-      ?.filter(t => t.type === 'purchase')
-      .reduce((sum, t) => sum + parseFloat(t.total_amount), 0) || 0;
+      ?.filter((t) => t.type === 'purchase')
+      .reduce((sum: number, t) => sum + parseFloat(String(t.total_amount)), 0) || 0;
 
     const totalTransactions = transactions?.length || 0;
-    const salesTransactions = transactions?.filter(t => t.type === 'sale').length || 0;
-    const purchaseTransactions = transactions?.filter(t => t.type === 'purchase').length || 0;
+    const salesTransactions = transactions?.filter((t) => t.type === 'sale').length || 0;
+    const purchaseTransactions = transactions?.filter((t) => t.type === 'purchase').length || 0;
 
     // Calculate daily sales for chart
     const dailySales = transactions
-      ?.filter(t => t.type === 'sale')
-      .reduce((acc, t) => {
-        const date = t.date;
-        acc[date] = (acc[date] || 0) + parseFloat(t.total_amount);
+      ?.filter((t) => t.type === 'sale')
+      .reduce((acc: Record<string, number>, t) => {
+        const date = String(t.date);
+        acc[date] = (acc[date] || 0) + parseFloat(String(t.total_amount));
         return acc;
       }, {} as Record<string, number>) || {};
 
@@ -107,22 +74,12 @@ export async function GET(request: NextRequest) {
     }));
 
     // Get top selling products
-    const { data: topProducts } = await supabaseClient
-      .from(TABLES.PRODUCTS)
-      .select('*')
-      .order('quantity', { ascending: false })
-      .limit(5);
+    const topProductsSnap = await adminDb.collection(TABLES.PRODUCTS).orderBy('quantity', 'desc').limit(5).get();
+    const topProducts = topProductsSnap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
 
     // Get recent transactions
-    const { data: recentTransactions } = await supabaseClient
-      .from(TABLES.TRANSACTIONS)
-      .select(`
-        *,
-        customer:customers(name),
-        supplier:suppliers(name)
-      `)
-      .order('created_at', { ascending: false })
-      .limit(10);
+    const recentTxSnap = await adminDb.collection(TABLES.TRANSACTIONS).orderBy('created_at', 'desc').limit(10).get();
+    const recentTransactions = recentTxSnap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
 
     return NextResponse.json({
       analytics: {

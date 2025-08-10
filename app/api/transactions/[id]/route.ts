@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { TABLES } from '@/lib/supabase';
+import { TABLES } from '@/lib/firebase';
+import { adminDb } from '@/lib/firebase-server';
 
 // GET /api/transactions/[id] - Get single transaction
 export async function GET(
@@ -10,25 +10,20 @@ export async function GET(
   const { id } = await params;
   
   try {
-    const { data, error } = await supabase
-      .from(TABLES.TRANSACTIONS)
-      .select(`
-        *,
-        customer:customers(id, name, mobile),
-        supplier:suppliers(id, name, mobile)
-      `)
-      .eq('id', id)
-      .single();
-
-    if (error) {
-      console.error('Error fetching transaction:', error);
-      return NextResponse.json(
-        { error: 'Transaction not found' },
-        { status: 404 }
-      );
+    const doc = await adminDb.collection(TABLES.TRANSACTIONS).doc(id).get();
+    if (!doc.exists) return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+    const t = doc.data() as Record<string, unknown>;
+    let customer: Record<string, unknown> | null = null;
+    let supplier: Record<string, unknown> | null = null;
+    if ((t as any).customer_id) {
+      const cDoc = await adminDb.collection(TABLES.CUSTOMERS).doc(String((t as any).customer_id)).get();
+      if (cDoc.exists) customer = { id: cDoc.id, name: cDoc.data()?.name, mobile: cDoc.data()?.mobile };
     }
-
-    return NextResponse.json({ transaction: data });
+    if ((t as any).supplier_id) {
+      const sDoc = await adminDb.collection(TABLES.SUPPLIERS).doc(String((t as any).supplier_id)).get();
+      if (sDoc.exists) supplier = { id: sDoc.id, name: sDoc.data()?.name, mobile: sDoc.data()?.mobile };
+    }
+    return NextResponse.json({ transaction: { id: doc.id, ...t, customer, supplier } });
   } catch (error) {
     console.error('Error in transaction GET:', error);
     return NextResponse.json(
@@ -56,27 +51,20 @@ export async function PUT(
         { status: 400 }
       );
     }
-
-    const { data, error } = await supabase
-      .from(TABLES.TRANSACTIONS)
-      .update({ status })
-      .eq('id', id)
-      .select(`
-        *,
-        customer:customers(id, name, mobile),
-        supplier:suppliers(id, name, mobile)
-      `)
-      .single();
-
-    if (error) {
-      console.error('Error updating transaction:', error);
-      return NextResponse.json(
-        { error: 'Failed to update transaction' },
-        { status: 500 }
-      );
+    await adminDb.collection(TABLES.TRANSACTIONS).doc(id).update({ status, updated_at: new Date().toISOString() });
+    const doc = await adminDb.collection(TABLES.TRANSACTIONS).doc(id).get();
+    const t = doc.data() as Record<string, unknown>;
+    let customer: Record<string, unknown> | null = null;
+    let supplier: Record<string, unknown> | null = null;
+    if ((t as any).customer_id) {
+      const cDoc = await adminDb.collection(TABLES.CUSTOMERS).doc(String((t as any).customer_id)).get();
+      if (cDoc.exists) customer = { id: cDoc.id, name: cDoc.data()?.name, mobile: cDoc.data()?.mobile };
     }
-
-    return NextResponse.json({ transaction: data });
+    if ((t as any).supplier_id) {
+      const sDoc = await adminDb.collection(TABLES.SUPPLIERS).doc(String((t as any).supplier_id)).get();
+      if (sDoc.exists) supplier = { id: sDoc.id, name: sDoc.data()?.name, mobile: sDoc.data()?.mobile };
+    }
+    return NextResponse.json({ transaction: { id: doc.id, ...t, customer, supplier } });
   } catch (error) {
     console.error('Error in transaction PUT:', error);
     return NextResponse.json(
@@ -94,19 +82,7 @@ export async function DELETE(
   const { id } = await params;
   
   try {
-    const { error } = await supabase
-      .from(TABLES.TRANSACTIONS)
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      console.error('Error deleting transaction:', error);
-      return NextResponse.json(
-        { error: 'Failed to delete transaction' },
-        { status: 500 }
-      );
-    }
-
+    await adminDb.collection(TABLES.TRANSACTIONS).doc(id).delete();
     return NextResponse.json({ message: 'Transaction deleted successfully' });
   } catch (error) {
     console.error('Error in transaction DELETE:', error);

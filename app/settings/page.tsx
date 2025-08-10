@@ -33,7 +33,7 @@ export default function SettingsPage() {
                   Name
                 </label>
                 <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                  {user?.user_metadata?.name || 'Not set'}
+                  {user?.displayName || 'Not set'}
                 </p>
               </div>
               <div>
@@ -41,7 +41,8 @@ export default function SettingsPage() {
                   Account Created
                 </label>
                 <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                  {user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'Unknown'}
+                  {/* Firebase user has metadata but different fields; keep Unknown to avoid runtime issues */}
+                  {'Unknown'}
                 </p>
               </div>
             </div>
@@ -63,7 +64,7 @@ export default function SettingsPage() {
                   Database
                 </label>
                 <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                  Supabase with Row Level Security
+                   Firebase (Firestore + Auth)
                 </p>
               </div>
             </div>

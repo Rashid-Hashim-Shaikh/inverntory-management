@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { User, LogOut, Settings, ChevronDown } from 'lucide-react';
+import { User as UserIcon, LogOut, Settings, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import {
   DropdownMenu,
@@ -30,7 +30,7 @@ export function UserProfile() {
       <DropdownMenuTrigger asChild>
         <button className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors w-full">
           <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-            <User className="h-4 w-4 text-white" />
+            <UserIcon className="h-4 w-4 text-white" />
           </div>
           <span className="text-sm font-medium flex-1 text-left">
             {user.user_metadata?.name || user.email?.split('@')[0] || 'User'}
@@ -43,7 +43,7 @@ export function UserProfile() {
         <DropdownMenuLabel>
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">
-              {user.user_metadata?.name || 'User'}
+              {user.displayName || 'User'}
             </p>
             <p className="text-xs leading-none text-muted-foreground">
               {user.email}

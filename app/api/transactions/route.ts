@@ -1,27 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { TABLES } from '@/lib/supabase';
+import { TABLES } from '@/lib/firebase';
+import { adminDb, verifyFirebaseToken } from '@/lib/firebase-server';
+import { Query } from 'firebase-admin/firestore';
+import type { DecodedIdToken } from 'firebase-admin/auth';
 
 // Helper function to get authenticated user from JWT
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user) {
-      return null;
-    }
-    return user;
-  } catch (error) {
-    console.error('Error verifying JWT:', error);
-    return null;
-  }
+async function getAuthenticatedUser(request: NextRequest): Promise<DecodedIdToken | null> {
+  return await verifyFirebaseToken(request.headers.get('authorization') || undefined);
 }
 
 // GET /api/transactions - Get all transactions
@@ -36,53 +21,44 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || '';
-    const supabaseClient = createServerSupabaseClient(token);
-
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
     const status = searchParams.get('status');
     const type = searchParams.get('type');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
-
-    let query = supabaseClient
-      .from(TABLES.TRANSACTIONS)
-      .select(`
-        *,
-        customer:customers(id, name, mobile),
-        supplier:suppliers(id, name, mobile)
-      `)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
-
-    // Apply search filter
-    if (search) {
-      query = query.or(`invoice_number.ilike.%${search}%`);
-    }
-
-    // Apply status filter
-    if (status && status !== 'all') {
-      query = query.eq('status', status);
-    }
-
-    // Apply type filter
-    if (type && type !== 'all') {
-      query = query.eq('type', type);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('Error fetching transactions:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch transactions' },
-        { status: 500 }
+    try {
+      const q: Query = adminDb.collection(TABLES.TRANSACTIONS).orderBy('created_at', 'desc');
+      let filtered: Query = q;
+      if (status && status !== 'all') filtered = filtered.where('status', '==', status);
+      if (type && type !== 'all') filtered = filtered.where('type', '==', type);
+      const snapshot = await filtered.offset(offset).limit(limit).get();
+      type Tx = { invoice_number?: string; customer_id?: string; supplier_id?: string; type?: string; date?: string; total_amount?: number } & Record<string, unknown>;
+      let transactions = await Promise.all(
+        snapshot.docs.map(async (d): Promise<Record<string, unknown>> => {
+          const t = d.data() as Tx;
+          let customer: Record<string, unknown> | null = null;
+          let supplier: Record<string, unknown> | null = null;
+          if (t.customer_id) {
+            const cDoc = await adminDb.collection(TABLES.CUSTOMERS).doc(t.customer_id).get();
+            if (cDoc.exists) customer = { id: cDoc.id, name: cDoc.data()?.name, mobile: cDoc.data()?.mobile };
+          }
+          if (t.supplier_id) {
+            const sDoc = await adminDb.collection(TABLES.SUPPLIERS).doc(t.supplier_id).get();
+            if (sDoc.exists) supplier = { id: sDoc.id, name: sDoc.data()?.name, mobile: sDoc.data()?.mobile };
+          }
+          return { id: d.id, ...t, customer, supplier };
+        })
       );
+      if (search) {
+        const s = search.toLowerCase();
+        transactions = transactions.filter((t) => String((t as Tx).invoice_number || '').toLowerCase().includes(s));
+      }
+      return NextResponse.json({ transactions });
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      return NextResponse.json({ error: 'Failed to fetch transactions' }, { status: 500 });
     }
-
-    return NextResponse.json({ transactions: data });
   } catch (error) {
     console.error('Error in transactions GET:', error);
     return NextResponse.json(
@@ -103,10 +79,6 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
-
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || '';
-    const supabaseClient = createServerSupabaseClient(token);
 
     const body = await request.json();
     const {
@@ -131,13 +103,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if invoice number already exists
-    const { data: existingTransaction } = await supabaseClient
-      .from(TABLES.TRANSACTIONS)
-      .select('id')
-      .eq('invoice_number', invoice_number)
-      .single();
-
-    if (existingTransaction) {
+    const existing = await adminDb.collection(TABLES.TRANSACTIONS).where('invoice_number', '==', invoice_number).limit(1).get();
+    if (!existing.empty) {
       return NextResponse.json(
         { error: 'Transaction with this invoice number already exists' },
         { status: 400 }
@@ -156,7 +123,21 @@ export async function POST(request: NextRequest) {
       return dateString; // Return as-is if not in expected format
     };
 
-    const transactionData = {
+    const transactionData: {
+      type: string;
+      invoice_number: string;
+      date: string;
+      customer_id: string | null;
+      supplier_id: string | null;
+      items: unknown;
+      total_amount: number;
+      total_items: number;
+      total_quantity: number;
+      status: string;
+      user_id: string;
+      created_at: string;
+      updated_at: string;
+    } = {
       type,
       invoice_number,
       date: convertDate(date),
@@ -167,28 +148,28 @@ export async function POST(request: NextRequest) {
       total_items: parseInt(total_items) || items.length,
       total_quantity: parseInt(total_quantity) || items.reduce((sum: number, item: { quantity: number }) => sum + item.quantity, 0),
       status: status || 'completed',
-      // user_id will be auto-assigned by the database trigger
+      user_id: user.uid,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
-
-    const { data, error } = await supabaseClient
-      .from(TABLES.TRANSACTIONS)
-      .insert(transactionData)
-      .select(`
-        *,
-        customer:customers(id, name, mobile),
-        supplier:suppliers(id, name, mobile)
-      `)
-      .single();
-
-    if (error) {
+    try {
+      const ref = await adminDb.collection(TABLES.TRANSACTIONS).add(transactionData);
+      // Populate customer and supplier for response
+      let customer = null;
+      let supplier = null;
+      if (transactionData.customer_id) {
+        const cDoc = await adminDb.collection(TABLES.CUSTOMERS).doc(transactionData.customer_id).get();
+        if (cDoc.exists) customer = { id: cDoc.id, name: cDoc.data()?.name, mobile: cDoc.data()?.mobile };
+      }
+      if (transactionData.supplier_id) {
+        const sDoc = await adminDb.collection(TABLES.SUPPLIERS).doc(transactionData.supplier_id).get();
+        if (sDoc.exists) supplier = { id: sDoc.id, name: sDoc.data()?.name, mobile: sDoc.data()?.mobile };
+      }
+      return NextResponse.json({ transaction: { id: ref.id, ...transactionData, customer, supplier } }, { status: 201 });
+    } catch (error) {
       console.error('Error creating transaction:', error);
-      return NextResponse.json(
-        { error: 'Failed to create transaction' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 });
     }
-
-    return NextResponse.json({ transaction: data }, { status: 201 });
   } catch (error) {
     console.error('Error in transactions POST:', error);
     return NextResponse.json(

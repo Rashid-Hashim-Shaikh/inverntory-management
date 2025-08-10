@@ -1,27 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { TABLES } from '@/lib/supabase';
+import { TABLES } from '@/lib/firebase';
+import { adminDb, verifyFirebaseToken } from '@/lib/firebase-server';
+import type { DecodedIdToken } from 'firebase-admin/auth';
 
 // Helper function to get authenticated user from JWT
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user) {
-      return null;
-    }
-    return user;
-  } catch (error) {
-    console.error('Error verifying JWT:', error);
-    return null;
-  }
+async function getAuthenticatedUser(request: NextRequest): Promise<DecodedIdToken | null> {
+  return await verifyFirebaseToken(request.headers.get('authorization') || undefined);
 }
 
 // GET /api/suppliers/[id] - Get single supplier
@@ -39,25 +23,16 @@ export async function GET(
       );
     }
 
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || '';
-    const supabaseClient = createServerSupabaseClient(token);
-
-    const { data, error } = await supabaseClient
-      .from(TABLES.SUPPLIERS)
-      .select('*')
-      .eq('id', params.id)
-      .single();
-
-    if (error) {
+    try {
+      const doc = await adminDb.collection(TABLES.SUPPLIERS).doc(params.id).get();
+      if (!doc.exists) {
+        return NextResponse.json({ error: 'Supplier not found' }, { status: 404 });
+      }
+      return NextResponse.json({ supplier: { id: doc.id, ...doc.data() } });
+    } catch (error) {
       console.error('Error fetching supplier:', error);
-      return NextResponse.json(
-        { error: 'Supplier not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Supplier not found' }, { status: 404 });
     }
-
-    return NextResponse.json({ supplier: data });
   } catch (error) {
     console.error('Error in supplier GET:', error);
     return NextResponse.json(
@@ -82,10 +57,6 @@ export async function PUT(
       );
     }
 
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || '';
-    const supabaseClient = createServerSupabaseClient(token);
-
     const body = await request.json();
     const { name, email, mobile, address } = body;
 
@@ -98,41 +69,28 @@ export async function PUT(
     }
 
     // Check if mobile already exists for other suppliers
-    const { data: existingSupplier } = await supabaseClient
-      .from(TABLES.SUPPLIERS)
-      .select('id')
-      .eq('mobile', mobile)
-      .neq('id', params.id)
-      .single();
-
-    if (existingSupplier) {
+    const existing = await adminDb.collection(TABLES.SUPPLIERS).where('mobile', '==', mobile).limit(1).get();
+    if (!existing.empty && existing.docs[0].id !== params.id) {
       return NextResponse.json(
         { error: 'Supplier with this mobile number already exists' },
         { status: 400 }
       );
     }
 
-    const { data, error } = await supabaseClient
-      .from(TABLES.SUPPLIERS)
-      .update({
+    try {
+      await adminDb.collection(TABLES.SUPPLIERS).doc(params.id).update({
         name,
         email: email || '',
         mobile,
         address: address || '',
-      })
-      .eq('id', params.id)
-      .select()
-      .single();
-
-    if (error) {
+        updated_at: new Date().toISOString(),
+      });
+      const updated = await adminDb.collection(TABLES.SUPPLIERS).doc(params.id).get();
+      return NextResponse.json({ supplier: { id: updated.id, ...updated.data() } });
+    } catch (error) {
       console.error('Error updating supplier:', error);
-      return NextResponse.json(
-        { error: 'Failed to update supplier' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to update supplier' }, { status: 500 });
     }
-
-    return NextResponse.json({ supplier: data });
   } catch (error) {
     console.error('Error in supplier PUT:', error);
     return NextResponse.json(
@@ -157,24 +115,13 @@ export async function DELETE(
       );
     }
 
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || '';
-    const supabaseClient = createServerSupabaseClient(token);
-
-    const { error } = await supabaseClient
-      .from(TABLES.SUPPLIERS)
-      .delete()
-      .eq('id', params.id);
-
-    if (error) {
+    try {
+      await adminDb.collection(TABLES.SUPPLIERS).doc(params.id).delete();
+      return NextResponse.json({ message: 'Supplier deleted successfully' });
+    } catch (error) {
       console.error('Error deleting supplier:', error);
-      return NextResponse.json(
-        { error: 'Failed to delete supplier' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to delete supplier' }, { status: 500 });
     }
-
-    return NextResponse.json({ message: 'Supplier deleted successfully' });
   } catch (error) {
     console.error('Error in supplier DELETE:', error);
     return NextResponse.json(

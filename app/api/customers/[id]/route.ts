@@ -1,27 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
-import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { TABLES } from '@/lib/supabase';
+import { TABLES } from '@/lib/firebase';
+import { adminDb, verifyFirebaseToken } from '@/lib/firebase-server';
+import type { DecodedIdToken } from 'firebase-admin/auth';
 
 // Helper function to get authenticated user from JWT
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  
-  try {
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user) {
-      return null;
-    }
-    return user;
-  } catch (error) {
-    console.error('Error verifying JWT:', error);
-    return null;
-  }
+async function getAuthenticatedUser(request: NextRequest): Promise<DecodedIdToken | null> {
+  return await verifyFirebaseToken(request.headers.get('authorization') || undefined);
 }
 
 // GET /api/customers/[id] - Get single customer
@@ -39,25 +23,22 @@ export async function GET(
       );
     }
 
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || '';
-    const supabaseClient = createServerSupabaseClient(token);
-
-    const { data, error } = await supabaseClient
-      .from(TABLES.CUSTOMERS)
-      .select('*')
-      .eq('id', params.id)
-      .single();
-
-    if (error) {
+    try {
+      const doc = await adminDb.collection(TABLES.CUSTOMERS).doc(params.id).get();
+      if (!doc.exists) {
+        return NextResponse.json(
+          { error: 'Customer not found' },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({ customer: { id: doc.id, ...doc.data() } });
+    } catch (error) {
       console.error('Error fetching customer:', error);
       return NextResponse.json(
         { error: 'Customer not found' },
         { status: 404 }
       );
     }
-
-    return NextResponse.json({ customer: data });
   } catch (error) {
     console.error('Error in customer GET:', error);
     return NextResponse.json(
@@ -82,10 +63,6 @@ export async function PUT(
       );
     }
 
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || '';
-    const supabaseClient = createServerSupabaseClient(token);
-
     const body = await request.json();
     const { name, email, mobile, address } = body;
 
@@ -98,41 +75,32 @@ export async function PUT(
     }
 
     // Check if mobile already exists for other customers
-    const { data: existingCustomer } = await supabaseClient
-      .from(TABLES.CUSTOMERS)
-      .select('id')
-      .eq('mobile', mobile)
-      .neq('id', params.id)
-      .single();
-
-    if (existingCustomer) {
+    const existing = await adminDb
+      .collection(TABLES.CUSTOMERS)
+      .where('mobile', '==', mobile)
+      .limit(1)
+      .get();
+    if (!existing.empty && existing.docs[0].id !== params.id) {
       return NextResponse.json(
         { error: 'Customer with this mobile number already exists' },
         { status: 400 }
       );
     }
 
-    const { data, error } = await supabaseClient
-      .from(TABLES.CUSTOMERS)
-      .update({
+    try {
+      await adminDb.collection(TABLES.CUSTOMERS).doc(params.id).update({
         name,
         email: email || '',
         mobile,
         address: address || '',
-      })
-      .eq('id', params.id)
-      .select()
-      .single();
-
-    if (error) {
+        updated_at: new Date().toISOString(),
+      });
+      const updated = await adminDb.collection(TABLES.CUSTOMERS).doc(params.id).get();
+      return NextResponse.json({ customer: { id: updated.id, ...updated.data() } });
+    } catch (error) {
       console.error('Error updating customer:', error);
-      return NextResponse.json(
-        { error: 'Failed to update customer' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to update customer' }, { status: 500 });
     }
-
-    return NextResponse.json({ customer: data });
   } catch (error) {
     console.error('Error in customer PUT:', error);
     return NextResponse.json(
@@ -157,24 +125,13 @@ export async function DELETE(
       );
     }
 
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.substring(7) || '';
-    const supabaseClient = createServerSupabaseClient(token);
-
-    const { error } = await supabaseClient
-      .from(TABLES.CUSTOMERS)
-      .delete()
-      .eq('id', params.id);
-
-    if (error) {
+    try {
+      await adminDb.collection(TABLES.CUSTOMERS).doc(params.id).delete();
+      return NextResponse.json({ message: 'Customer deleted successfully' });
+    } catch (error) {
       console.error('Error deleting customer:', error);
-      return NextResponse.json(
-        { error: 'Failed to delete customer' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Failed to delete customer' }, { status: 500 });
     }
-
-    return NextResponse.json({ message: 'Customer deleted successfully' });
   } catch (error) {
     console.error('Error in customer DELETE:', error);
     return NextResponse.json(
