@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useProductStore } from '@/lib/store/products';
 import { useCustomerStore } from '@/lib/store/customers';
-import { useCartStore } from '@/lib/store/cart';
 import { useTransactionStore } from '@/lib/store/transactions';
 import { Card, CardContent } from '@/components/ui/card';
 import { Search, Plus, ShoppingCart, Receipt, Package, AlertCircle } from 'lucide-react';
@@ -12,50 +11,29 @@ import { useRouter } from 'next/navigation';
 import { Product } from '@/lib/store/products';
 import { isAuthenticated } from '@/lib/auth-utils';
 
+interface SaleItem {
+  product: Product;
+  quantity: number;
+  price: number;
+}
+
 export default function SalesPage() {
   const router = useRouter();
-  const { products, fetchProducts, loading: productsLoading } = useProductStore();
+  const { products, fetchProducts, loading: productsLoading, updateInventory } = useProductStore();
   const { customers, fetchCustomers, loading: customersLoading } = useCustomerStore();
-  const { 
-    items, 
-    addToCart, 
-    removeFromCart, 
-    clearCart, 
-    processCart,
-    getTotalValue,
-    getTotalItems 
-  } = useCartStore();
   const { addTransaction, loading: transactionLoading } = useTransactionStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState('');
-  const [invoiceNumber, setInvoiceNumber] = useState('');
-  const [saleDate, setSaleDate] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     console.log('Sales page: Fetching products and customers...');
     fetchProducts();
     fetchCustomers();
-    
-    // Set default date to today
-    const today = new Date();
-    const formattedDate = today.toLocaleDateString('en-GB'); // DD/MM/YYYY format
-    setSaleDate(formattedDate);
-    
-    // Generate invoice number
-    const timestamp = Date.now();
-    setInvoiceNumber(`SALE-${timestamp}`);
   }, [fetchProducts, fetchCustomers]);
-
-  // Debug logging
-  useEffect(() => {
-    console.log('Sales page: Products state changed:', { 
-      productsCount: products.length, 
-      loading: productsLoading,
-      products: products.slice(0, 3) // Log first 3 products
-    });
-  }, [products, productsLoading]);
 
   // Client-side filtering and searching
   const filteredProducts = products.filter(product => {
@@ -65,18 +43,64 @@ export default function SalesPage() {
     return matchesSearch && matchesCategory;
   });
 
-  const handleAddToCart = (product: Product) => {
+  const handleAddToSale = (product: Product) => {
     if (product.quantity <= 0) {
       toast.error(`${product.name} is out of stock!`);
       return;
     }
-    addToCart(product, 'out', 1); // 'out' means selling (reducing inventory)
-    toast.success(`${product.name} added to cart`);
+
+    const existingItemIndex = saleItems.findIndex(item => item.product.id === product.id);
+    
+    if (existingItemIndex >= 0) {
+      // Update existing item quantity
+      const updatedItems = [...saleItems];
+      updatedItems[existingItemIndex] = {
+        ...updatedItems[existingItemIndex],
+        quantity: updatedItems[existingItemIndex].quantity + 1
+      };
+      setSaleItems(updatedItems);
+    } else {
+      // Add new item
+      setSaleItems([...saleItems, {
+        product,
+        quantity: 1,
+        price: product.price
+      }]);
+    }
+    toast.success(`${product.name} added to sale`);
+  };
+
+  const handleUpdateQuantity = (productId: string, newQuantity: number) => {
+    if (newQuantity <= 0) {
+      setSaleItems(saleItems.filter(item => item.product.id !== productId));
+    } else {
+      setSaleItems(saleItems.map(item => 
+        item.product.id === productId 
+          ? { ...item, quantity: newQuantity }
+          : item
+      ));
+    }
+  };
+
+  const handleUpdatePrice = (productId: string, newPrice: number) => {
+    setSaleItems(saleItems.map(item => 
+      item.product.id === productId 
+        ? { ...item, price: newPrice }
+        : item
+    ));
+  };
+
+  const handleRemoveItem = (productId: string) => {
+    setSaleItems(saleItems.filter(item => item.product.id !== productId));
+  };
+
+  const calculateTotal = () => {
+    return saleItems.reduce((sum, item) => sum + (item.quantity * item.price), 0);
   };
 
   const handleProcessSale = async () => {
-    if (items.length === 0) {
-      toast.error('Cart is empty!');
+    if (saleItems.length === 0) {
+      toast.error('No items in sale!');
       return;
     }
 
@@ -85,46 +109,61 @@ export default function SalesPage() {
       return;
     }
 
-    try {
-      // Process inventory updates
-      const inventoryResult = await processCart(async (productId: string, quantityChange: number) => {
-        const success = await useProductStore.getState().updateInventory(productId, quantityChange);
-        return success;
-      });
+    setIsProcessing(true);
 
-      if (!inventoryResult.success) {
-        toast.error('Failed to update inventory: ' + inventoryResult.errors.join(', '));
-        return;
+    try {
+      // First, update inventory for all items (reduce stock)
+      for (const item of saleItems) {
+        const success = await updateInventory(item.product.id, -item.quantity);
+        if (!success) {
+          toast.error(`Failed to update inventory for ${item.product.name}`);
+          setIsProcessing(false);
+          return;
+        }
       }
 
       // Create transaction
+      const invoiceNumber = `SALE-${Date.now()}`;
+      const currentDate = new Date().toLocaleDateString('en-IN');
+      const totalAmount = calculateTotal();
+
       const transactionData = {
         type: 'sale' as const,
-        invoiceNumber: invoiceNumber,
-        date: saleDate,
+        invoiceNumber,
+        date: currentDate,
         customerId: selectedCustomer,
         supplierId: undefined,
-        items: items,
-        totalAmount: getTotalValue(),
-        totalItems: getTotalItems(),
-        totalQuantity: items.reduce((sum, item) => sum + item.quantity, 0),
+        items: saleItems.map(item => ({
+          id: `${item.product.id}-${Date.now()}`,
+          productId: item.product.id,
+          product: item.product,
+          quantity: item.quantity,
+          price: item.price,
+          type: 'out' as const,
+          addedAt: Date.now(),
+        })),
+        totalAmount,
+        totalItems: saleItems.length,
+        totalQuantity: saleItems.reduce((sum, item) => sum + item.quantity, 0),
         status: 'completed' as const,
       };
 
-      const success = await addTransaction(transactionData);
+      const result = await addTransaction(transactionData);
 
-      if (success) {
-        toast.success('Sale completed successfully!');
-        clearCart();
-        setSelectedCustomer('');
-        setInvoiceNumber(`SALE-${Date.now()}`);
-        router.push('/transactions');
+      if (result) {
+        toast.success('Sale completed successfully! Redirecting to transactions...');
+        // Clear the sale items
+        setSaleItems([]);
+        // Redirect to transactions page with the transaction ID for invoice viewing
+        router.push(`/transactions?transactionId=${result.id}`);
       } else {
-        toast.error('Failed to create transaction');
+        toast.error('Failed to complete sale. Please try again.');
       }
     } catch (error) {
       console.error('Error processing sale:', error);
       toast.error('Failed to process sale');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -147,11 +186,11 @@ export default function SalesPage() {
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2 text-gray-600">
                 <ShoppingCart className="h-5 w-5" />
-                <span>{items.length} items</span>
+                <span>{saleItems.length} items</span>
               </div>
               <div className="flex items-center space-x-2 text-gray-600">
                 <Receipt className="h-5 w-5" />
-                <span>₹{getTotalValue().toFixed(2)}</span>
+                <span>₹{calculateTotal().toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -246,7 +285,7 @@ export default function SalesPage() {
                               {product.category} • {product.unit}
                             </div>
                             <button
-                              onClick={() => handleAddToCart(product)}
+                              onClick={() => handleAddToSale(product)}
                               disabled={product.quantity <= 0}
                               className="ml-2 px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                             >
@@ -262,7 +301,7 @@ export default function SalesPage() {
               </div>
             </div>
 
-            {/* Cart Section */}
+            {/* Sale Details Section */}
             <div className="w-96 bg-white border-l flex flex-col">
               <div className="p-4 border-b">
                 <h2 className="text-lg font-semibold">Sale Details</h2>
@@ -295,53 +334,60 @@ export default function SalesPage() {
                   )}
                 </div>
 
-                {/* Invoice Details */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Number</label>
-                    <input
-                      type="text"
-                      value={invoiceNumber}
-                      onChange={(e) => setInvoiceNumber(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Sale Date</label>
-                    <input
-                      type="text"
-                      value={saleDate}
-                      onChange={(e) => setSaleDate(e.target.value)}
-                      placeholder="DD/MM/YYYY"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Cart Items */}
+                {/* Sale Items */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Cart Items ({items.length})</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Sale Items ({saleItems.length})</label>
                   <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {items.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                        <div className="flex-1">
-                          <p className="font-medium text-sm">{item.product.name}</p>
-                          <p className="text-xs text-gray-600">₹{item.price} × {item.quantity}</p>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <span className="font-semibold">₹{(item.price * item.quantity).toFixed(2)}</span>
+                    {saleItems.map((item) => (
+                      <div key={item.product.id} className="p-2 bg-gray-50 rounded">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex-1">
+                            <p className="font-medium text-sm">{item.product.name}</p>
+                            <p className="text-xs text-gray-600">{item.product.category} • {item.product.unit}</p>
+                          </div>
                           <button
-                            onClick={() => removeFromCart(item.id)}
+                            onClick={() => handleRemoveItem(item.product.id)}
                             className="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100"
                           >
                             Remove
                           </button>
                         </div>
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-xs text-gray-600">Quantity</label>
+                            <input
+                              type="number"
+                              value={item.quantity}
+                              onChange={(e) => handleUpdateQuantity(item.product.id, parseInt(e.target.value) || 1)}
+                              min="1"
+                              max={item.product.quantity}
+                              className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-600">Price</label>
+                            <input
+                              type="number"
+                              value={item.price}
+                              onChange={(e) => handleUpdatePrice(item.product.id, parseFloat(e.target.value) || 0)}
+                              min="0"
+                              step="0.01"
+                              className="w-full px-2 py-2 text-xs border border-gray-300 rounded"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="text-right mt-1">
+                          <span className="text-sm font-semibold">
+                            ₹{(item.quantity * item.price).toFixed(2)}
+                          </span>
+                        </div>
                       </div>
                     ))}
-                    {items.length === 0 && (
+                    {saleItems.length === 0 && (
                       <p className="text-gray-500 text-sm text-center py-4">
-                        No items in cart
+                        No items in sale
                       </p>
                     )}
                   </div>
@@ -351,7 +397,7 @@ export default function SalesPage() {
                 <div className="border-t pt-4">
                   <div className="flex justify-between items-center text-lg font-semibold">
                     <span>Total:</span>
-                    <span>₹{getTotalValue().toFixed(2)}</span>
+                    <span>₹{calculateTotal().toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -360,17 +406,17 @@ export default function SalesPage() {
               <div className="p-4 border-t space-y-2">
                 <button
                   onClick={handleProcessSale}
-                  disabled={items.length === 0 || !selectedCustomer || transactionLoading}
+                  disabled={saleItems.length === 0 || !selectedCustomer || isProcessing}
                   className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {transactionLoading ? 'Processing...' : 'Complete Sale'}
+                  {isProcessing ? 'Processing...' : 'Complete Sale'}
                 </button>
                 <button
-                  onClick={clearCart}
-                  disabled={items.length === 0}
+                  onClick={() => setSaleItems([])}
+                  disabled={saleItems.length === 0}
                   className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Clear Cart
+                  Clear Sale
                 </button>
               </div>
             </div>

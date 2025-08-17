@@ -1,8 +1,18 @@
 import { create } from 'zustand';
 import { authenticatedFetch } from '@/lib/auth-utils';
-import { CartItem } from './cart';
 import { Customer } from './customers';
 import { Supplier } from './suppliers';
+
+// Define CartItem locally since cart store was removed
+export interface CartItem {
+  id: string;
+  productId: string;
+  product: any; // Product type
+  quantity: number;
+  price: number;
+  type: 'in' | 'out';
+  addedAt: number;
+}
 
 export interface Transaction {
   id: string;
@@ -39,7 +49,7 @@ interface TransactionStore {
   
   // API Actions
   fetchTransactions: (search?: string, status?: string, type?: string) => Promise<void>;
-  addTransaction: (transactionData: TransactionFormData) => Promise<boolean>;
+  addTransaction: (transactionData: TransactionFormData) => Promise<Transaction | false>;
   updateTransactionStatus: (id: string, status: Transaction['status']) => Promise<boolean>;
   
   // Local Actions
@@ -114,7 +124,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
     }
   },
   
-  addTransaction: async (transactionData: TransactionFormData) => {
+  addTransaction: async (transactionData: TransactionFormData): Promise<Transaction | false> => {
     set({ loading: true, error: null });
     
     try {
@@ -158,14 +168,14 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
         status: data.transaction.status,
         createdAt: data.transaction.created_at,
       };
-
+      
       // Add new transaction to the list
       set((state) => ({
         transactions: [transformedTransaction, ...state.transactions],
         loading: false,
       }));
       
-      return true;
+      return transformedTransaction;
     } catch (error) {
       set({ 
         error: error instanceof Error ? error.message : 'Failed to create transaction',

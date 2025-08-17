@@ -5,24 +5,24 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
   LucideHome, 
-  LucideUsers,
+  LucidePackage, 
+  LucideUsers, 
+  LucideTruck, 
+ 
   LucideSettings,
-  LucidePackage,
-  LucideLayoutDashboard,
-  LucideTruck,
-  LucideReceipt,
+  LucideBarChart3,
   LucideShoppingCart,
-  LucideArrowUpDown
-} from "lucide-react";
+  LucideReceipt
+} from 'lucide-react';
 import { useSidebar } from "./ui/sidebar";
 import { cn } from "@/lib/utils";
 import { UserProfile } from "./user-profile";
 
 const navItems = [
-  { label: "Dashboard", icon: LucideLayoutDashboard, href: "/" },
+  { label: "Dashboard", icon: LucideBarChart3, href: "/" },
   { label: "Products", icon: LucidePackage, href: "/products" },
   { label: "Sales", icon: LucideShoppingCart, href: "/sales" },
-  { label: "Purchases", icon: LucideArrowUpDown, href: "/purchases" },
+  { label: "Purchases", icon: LucideReceipt, href: "/purchases" },
   { label: "Transactions", icon: LucideReceipt, href: "/transactions" },
   { label: "Customers", icon: LucideUsers, href: "/customers" },
   { label: "Suppliers", icon: LucideTruck, href: "/suppliers" },

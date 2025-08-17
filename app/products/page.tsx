@@ -1,14 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Plus, ShoppingCart } from 'lucide-react';
+import { Search, Plus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { useTheme } from '@/lib/use-theme';
 import { AddProductModal } from '@/components/add-product-modal';
-import { CartSidebar } from '@/components/cart-sidebar';
 import { useProductStore, ProductFormData } from '@/lib/store/products';
-import { useCartStore } from '@/lib/store/cart';
-import { CartBadge } from '@/components/cart-badge';
 
 export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -25,7 +22,6 @@ export default function ProductsPage() {
     searchProducts, 
     clearError 
   } = useProductStore();
-  const { addToCart, toggleCart } = useCartStore();
 
   // Fetch products on component mount
   useEffect(() => {
@@ -71,22 +67,8 @@ export default function ProductsPage() {
             />
           </div>
           
-          {/* Cart and Add Product Buttons */}
+          {/* Add Product Button */}
           <div className="flex gap-3">
-            {/* Cart Toggle Button */}
-            <button
-              onClick={toggleCart}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors hover:opacity-90 relative"
-              style={{
-                backgroundColor: theme.colors.secondary,
-                color: theme.colors.secondaryForeground,
-              }}
-            >
-              <ShoppingCart className="h-4 w-4" />
-              Cart
-              <CartBadge />
-            </button>
-
             {/* Add Product Button */}
             <button
               onClick={handleOpenModal}
@@ -159,19 +141,19 @@ export default function ProductsPage() {
                   </div>
                 </div>
                 
-                {/* In/Out Buttons */}
-                <div className="grid grid-cols-2 gap-2">
+                {/* Product Actions */}
+                <div className="flex gap-2">
                   <button
-                    onClick={() => addToCart(product, 'in')}
-                    className="px-3 py-2 rounded-lg text-sm font-medium transition-colors hover:opacity-90 bg-green-600 text-white"
+                    onClick={() => window.location.href = '/purchases'}
+                    className="flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors hover:opacity-90 bg-green-600 text-white"
                   >
-                    In
+                    Manage Purchases
                   </button>
                   <button
-                    onClick={() => addToCart(product, 'out')}
-                    className="px-3 py-2 rounded-lg text-sm font-medium transition-colors hover:opacity-90 bg-blue-600 text-white"
+                    onClick={() => window.location.href = '/sales'}
+                    className="flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors hover:opacity-90 bg-blue-600 text-white"
                   >
-                    Out
+                    Manage Sales
                   </button>
                 </div>
               </div>
@@ -227,9 +209,6 @@ export default function ProductsPage() {
         onClose={() => setIsModalOpen(false)}
         onAddProduct={handleAddProduct}
       />
-
-      {/* Cart Sidebar */}
-      <CartSidebar />
     </div>
   );
 } 

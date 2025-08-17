@@ -1,7 +1,20 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { CartItem } from '@/lib/store/cart';
 import { Customer } from '@/lib/store/customers';
+
+// Define the item structure locally since cart store was removed
+interface InvoiceItem {
+  id: string;
+  productId: string;
+  product: {
+    name: string;
+    unit: string;
+  };
+  quantity: number;
+  price: number;
+  type: 'in' | 'out';
+  addedAt: number;
+}
 
 // Extend jsPDF type to include lastAutoTable property
 declare module 'jspdf' {
@@ -12,7 +25,7 @@ declare module 'jspdf' {
 
 interface InvoiceData {
   customer: Customer;
-  items: CartItem[];
+  items: InvoiceItem[];
   invoiceNumber: string;
   date: string;
   totalAmount: number;

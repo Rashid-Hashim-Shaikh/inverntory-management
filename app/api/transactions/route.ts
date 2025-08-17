@@ -152,6 +152,7 @@ export async function POST(request: NextRequest) {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+    
     try {
       const ref = await adminDb.collection(TABLES.TRANSACTIONS).add(transactionData);
       // Populate customer and supplier for response
