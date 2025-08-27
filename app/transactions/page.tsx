@@ -24,6 +24,47 @@ export default function TransactionsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending' | 'cancelled'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'sale' | 'purchase'>('all');
+  const [monthFilter, setMonthFilter] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [dateFilterType, setDateFilterType] = useState<'none' | 'month' | 'range'>('none');
+  const [dateError, setDateError] = useState<string>('');
+  
+  // Helper function to get current month in YYYY-MM format
+  const getCurrentMonth = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+  };
+
+  // Helper function to format month for display
+  const formatMonthDisplay = (monthString: string) => {
+    if (!monthString) return '';
+    const [year, month] = monthString.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+    return date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  };
+
+  // Set default month filter to current month
+  useEffect(() => {
+    if (dateFilterType === 'month' && !monthFilter) {
+      setMonthFilter(getCurrentMonth());
+    }
+  }, [dateFilterType, monthFilter]);
+
+  // Validate date range
+  useEffect(() => {
+    if (dateFilterType === 'range' && startDate && endDate) {
+      if (new Date(startDate) > new Date(endDate)) {
+        setDateError('End date cannot be before start date');
+      } else {
+        setDateError('');
+      }
+    } else {
+      setDateError('');
+    }
+  }, [startDate, endDate, dateFilterType]);
   
   // Invoice preview state
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -41,12 +82,32 @@ export default function TransactionsPage() {
     fetchTransactions();
   }, [fetchTransactions]);
 
+  // Fetch transactions when filters change
+  useEffect(() => {
+    // Don't fetch if there's a date validation error
+    if (dateError) {
+      return;
+    }
+
+    let month: string | undefined;
+    let startDateParam: string | undefined;
+    let endDateParam: string | undefined;
+
+    if (dateFilterType === 'month' && monthFilter) {
+      month = monthFilter;
+    } else if (dateFilterType === 'range' && startDate && endDate) {
+      startDateParam = startDate;
+      endDateParam = endDate;
+    }
+
+    fetchTransactions(searchTerm, statusFilter, typeFilter, month, startDateParam, endDateParam);
+  }, [fetchTransactions, searchTerm, statusFilter, typeFilter, monthFilter, startDate, endDate, dateFilterType, dateError]);
+
   // Handle transactionId from URL params for automatic invoice viewing
   useEffect(() => {
     if (transactionId && processedTransactionId.current !== transactionId && transactions.length > 0) {
       const transaction = transactions.find(t => t.id === transactionId);
       if (transaction && transaction.type === 'sale') {
-        console.log('Auto-opening invoice for transaction:', transactionId);
         setSelectedTransaction(transaction);
         processedTransactionId.current = transactionId;
         generateInvoice(transaction);
@@ -145,10 +206,6 @@ export default function TransactionsPage() {
       return;
     }
 
-    console.log('Generating invoice for transaction:', transaction);
-    console.log('Transaction items:', transaction.items);
-    console.log('Customer:', transaction.customer);
-
     setIsGenerating(true);
     setPdfDataUri(''); // Clear previous PDF
     
@@ -161,10 +218,7 @@ export default function TransactionsPage() {
         totalAmount: transaction.totalAmount
       };
 
-      console.log('Invoice data being sent to PDF generator:', invoiceData);
-
       const dataUri = generateAndPreviewPDF(invoiceData);
-      console.log('PDF generated successfully, dataUri length:', dataUri.length);
       
       if (dataUri && dataUri.length > 0) {
         setPdfDataUri(dataUri);
@@ -448,7 +502,73 @@ export default function TransactionsPage() {
           backgroundColor: theme.colors.card,
           borderColor: theme.colors.border 
         }}>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Quick Date Filters */}
+          <div className="mb-4 flex flex-wrap gap-2">
+            <button
+              onClick={() => {
+                setDateFilterType('month');
+                setMonthFilter(getCurrentMonth());
+              }}
+              className={`px-3 py-1 text-sm rounded-lg border transition-colors ${
+                dateFilterType === 'month' && monthFilter === getCurrentMonth()
+                  ? 'bg-blue-100 text-blue-800 border-blue-300'
+                  : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              This Month
+            </button>
+            <button
+              onClick={() => {
+                setDateFilterType('month');
+                const lastMonth = new Date();
+                lastMonth.setMonth(lastMonth.getMonth() - 1);
+                const year = lastMonth.getFullYear();
+                const month = String(lastMonth.getMonth() + 1).padStart(2, '0');
+                setMonthFilter(`${year}-${month}`);
+              }}
+              className="px-3 py-1 text-sm rounded-lg border bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 transition-colors"
+            >
+              Last Month
+            </button>
+            <button
+              onClick={() => {
+                setDateFilterType('range');
+                const today = new Date();
+                const thirtyDaysAgo = new Date();
+                thirtyDaysAgo.setDate(today.getDate() - 30);
+                setStartDate(thirtyDaysAgo.toISOString().split('T')[0]);
+                setEndDate(today.toISOString().split('T')[0]);
+              }}
+              className="px-3 py-1 text-sm rounded-lg border bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 transition-colors"
+            >
+              Last 30 Days
+            </button>
+            <button
+              onClick={() => {
+                setDateFilterType('range');
+                const today = new Date();
+                const startOfYear = new Date(today.getFullYear(), 0, 1);
+                setStartDate(startOfYear.toISOString().split('T')[0]);
+                setEndDate(today.toISOString().split('T')[0]);
+              }}
+              className="px-3 py-1 text-sm rounded-lg border bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 transition-colors"
+            >
+              This Year
+            </button>
+            <button
+              onClick={() => {
+                setDateFilterType('none');
+                setMonthFilter('');
+                setStartDate('');
+                setEndDate('');
+              }}
+              className="px-3 py-1 text-sm rounded-lg border bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 transition-colors"
+            >
+              Clear Filters
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4" 
@@ -504,6 +624,98 @@ export default function TransactionsPage() {
               </select>
             </div>
 
+            {/* Date Filter Type */}
+            <div>
+              <select
+                value={dateFilterType}
+                onChange={(e) => {
+                  setDateFilterType(e.target.value as 'none' | 'month' | 'range');
+                  if (e.target.value === 'none') {
+                    setMonthFilter('');
+                    setStartDate('');
+                    setEndDate('');
+                  }
+                }}
+                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                style={{
+                  backgroundColor: theme.colors.input,
+                  borderColor: theme.colors.border,
+                  color: theme.colors.foreground,
+                }}
+              >
+                <option value="none">No Date Filter</option>
+                <option value="month">Filter by Month</option>
+                <option value="range">Custom Date Range</option>
+              </select>
+            </div>
+
+            {/* Month Filter */}
+            {dateFilterType === 'month' && (
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: theme.colors.mutedForeground }}>
+                  Select Month
+                </label>
+                <input
+                  type="month"
+                  value={monthFilter}
+                  onChange={(e) => setMonthFilter(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{
+                    backgroundColor: theme.colors.input,
+                    borderColor: theme.colors.border,
+                    color: theme.colors.foreground,
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Date Range Filters */}
+            {dateFilterType === 'range' && (
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium mb-1" style={{ color: theme.colors.mutedForeground }}>
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    style={{
+                      backgroundColor: theme.colors.input,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.foreground,
+                    }}
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-medium mb-1" style={{ color: theme.colors.mutedForeground }}>
+                    End Date
+                  </label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    style={{
+                      backgroundColor: theme.colors.input,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.foreground,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Date Error Display */}
+            {dateError && (
+              <div className="col-span-full">
+                <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg border border-red-200">
+                  {dateError}
+                </p>
+              </div>
+            )}
+
             {/* Results Count */}
             <div className="flex items-center justify-center">
               <span className="text-sm font-medium" style={{ color: theme.colors.mutedForeground }}>
@@ -512,6 +724,48 @@ export default function TransactionsPage() {
             </div>
           </div>
         </div>
+
+        {/* Filter Summary */}
+        {(dateFilterType !== 'none' || searchTerm || statusFilter !== 'all' || typeFilter !== 'all') && (
+          <div className="mb-4 p-3 rounded-lg border" style={{ 
+            backgroundColor: theme.colors.card,
+            borderColor: theme.colors.border 
+          }}>
+            <div className="flex flex-wrap items-center gap-4 text-sm">
+              <span className="font-medium" style={{ color: theme.colors.foreground }}>Active Filters:</span>
+              
+              {searchTerm && (
+                <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
+                  Search: "{searchTerm}"
+                </span>
+              )}
+              
+              {statusFilter !== 'all' && (
+                <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
+                  Status: {statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
+                </span>
+              )}
+              
+              {typeFilter !== 'all' && (
+                <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full text-xs">
+                  Type: {typeFilter === 'sale' ? 'Sales' : 'Purchases'}
+                </span>
+              )}
+              
+              {dateFilterType === 'month' && monthFilter && (
+                <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-xs">
+                  Month: {formatMonthDisplay(monthFilter)}
+                </span>
+              )}
+              
+              {dateFilterType === 'range' && startDate && endDate && (
+                <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-xs">
+                  Date Range: {new Date(startDate).toLocaleDateString('en-IN')} - {new Date(endDate).toLocaleDateString('en-IN')}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Transactions Table */}
         <div className="rounded-lg border overflow-hidden" style={{ 

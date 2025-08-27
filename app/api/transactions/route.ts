@@ -25,13 +25,34 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     const status = searchParams.get('status');
     const type = searchParams.get('type');
+    const month = searchParams.get('month'); // Format: YYYY-MM
+    const startDate = searchParams.get('startDate'); // Format: YYYY-MM-DD
+    const endDate = searchParams.get('endDate'); // Format: YYYY-MM-DD
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
+    
     try {
       const q: Query = adminDb.collection(TABLES.TRANSACTIONS).orderBy('created_at', 'desc');
       let filtered: Query = q;
+      
       if (status && status !== 'all') filtered = filtered.where('status', '==', status);
       if (type && type !== 'all') filtered = filtered.where('type', '==', type);
+      
+      // Apply date filters
+      if (month) {
+        // Filter by month (YYYY-MM format)
+        const [year, monthNum] = month.split('-');
+        const startOfMonth = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
+        const endOfMonth = new Date(parseInt(year), parseInt(monthNum), 0, 23, 59, 59);
+        
+        filtered = filtered.where('date', '>=', startOfMonth.toISOString().split('T')[0]);
+        filtered = filtered.where('date', '<=', endOfMonth.toISOString().split('T')[0]);
+      } else if (startDate && endDate) {
+        // Filter by date range
+        filtered = filtered.where('date', '>=', startDate);
+        filtered = filtered.where('date', '<=', endDate);
+      }
+      
       const snapshot = await filtered.offset(offset).limit(limit).get();
       type Tx = { invoice_number?: string; customer_id?: string; supplier_id?: string; type?: string; date?: string; total_amount?: number } & Record<string, unknown>;
       let transactions = await Promise.all(

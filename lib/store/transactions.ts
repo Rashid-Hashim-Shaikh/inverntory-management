@@ -48,7 +48,7 @@ interface TransactionStore {
   error: string | null;
   
   // API Actions
-  fetchTransactions: (search?: string, status?: string, type?: string) => Promise<void>;
+  fetchTransactions: (search?: string, status?: string, type?: string, month?: string, startDate?: string, endDate?: string) => Promise<void>;
   addTransaction: (transactionData: TransactionFormData) => Promise<Transaction | false>;
   updateTransactionStatus: (id: string, status: Transaction['status']) => Promise<boolean>;
   
@@ -70,7 +70,7 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
   error: null,
   
   // API Actions
-  fetchTransactions: async (search?: string, status?: string, type?: string) => {
+  fetchTransactions: async (search?: string, status?: string, type?: string, month?: string, startDate?: string, endDate?: string) => {
     set({ loading: true, error: null });
     
     try {
@@ -78,6 +78,9 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
       if (search) params.append('search', search);
       if (status && status !== 'all') params.append('status', status);
       if (type && type !== 'all') params.append('type', type);
+      if (month) params.append('month', month);
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
       
       const response = await authenticatedFetch(`/api/transactions?${params.toString()}`);
       const data = await response.json();
